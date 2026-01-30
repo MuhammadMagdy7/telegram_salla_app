@@ -58,3 +58,14 @@ CREATE TABLE IF NOT EXISTS option_contracts (
     net_profit DECIMAL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Pending Subscriptions (for users who paid but haven't registered yet)
+CREATE TABLE IF NOT EXISTS pending_subscriptions (
+    id SERIAL PRIMARY KEY,
+    phone_number TEXT NOT NULL,
+    salla_order_id TEXT UNIQUE, 
+    days INTEGER DEFAULT 30,
+    status TEXT DEFAULT 'pending', -- pending, claimed
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pending_phone ON pending_subscriptions(phone_number);
