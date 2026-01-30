@@ -1,0 +1,28 @@
+{
+    "symbols": [
+        {
+            "symbol": "SPX",
+            "type": "fund"
+        },
+        {
+            "symbol": "AAPL",
+            "type": "company"
+        },
+        {
+            "symbol": "CROWD",
+            "type": "company"
+        },
+        {
+            "symbol": "NVDA",
+            "type": "company"
+        },
+        {
+            "symbol": "ADBE",
+            "type": "fund"
+        },
+        {
+            "symbol": "GOOGL",
+            "type": "company"
+        }
+    ]
+}

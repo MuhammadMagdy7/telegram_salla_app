@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h2>إدارة عقود الصفقات</h2>
+    </div>
+    <div class="col-md-6 text-start">
+        <div class="btn-group" role="group">
+            <a href="?period=all" class="btn btn-outline-secondary {% if period == 'all' %}active{% endif %}">الكل</a>
+            <a href="?period=month" class="btn btn-outline-secondary {% if period == 'month' %}active{% endif %}">هذا
+                الشهر</a>
+            <a href="?period=week" class="btn btn-outline-secondary {% if period == 'week' %}active{% endif %}">هذا
+                الأسبوع</a>
+        </div>
+        <button class="btn btn-success ms-2" onclick="generateImage()">
+            <i class="bi bi-card-image"></i> إنشاء صورة
+        </button>
+        <button class="btn btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#addContractModal">
+            <i class="bi bi-plus-lg"></i> إضافة عقد جديد
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;"><input type="checkbox" id="selectAll"></th>
+                        <th>التاريخ</th>
+                        <th>سترايك (العقد)</th>
+                        <th>سعر العقد</th>
+                        <th>الربح</th>
+                        <th>الخسارة</th>
+                        <th>صافي العقد</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for contract in contracts %}
+                    <tr>
+                        <td><input type="checkbox" name="contract_ids" value="{{ contract.id }}"
+                                class="form-check-input"></td>
+                        <td>{{ contract.contract_date }}</td>
+                        <td>{{ contract.strike }}</td>
+                        <td>{{ contract.contract_price }}</td>
+                        <td class="text-success">{{ contract.profit }}</td>
+                        <td class="text-danger">{{ contract.loss }}</td>
+                        <td class="{% if contract.net_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ contract.net_profit }}
+                        </td>
+                        <td>
+                            <form action="/admin/contracts/delete" method="post" style="display:inline;">
+                                <input type="hidden" name="contract_id" value="{{ contract.id }}">
+                                <button type="submit" class="btn btn-sm btn-danger"
+                                    onclick="return confirm('هل أنت متأكد؟')">حذف</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+    document.getElementById('selectAll').addEventListener('change', function () {
+        var checkboxes = document.querySelectorAll('input[name="contract_ids"]');
+        for (var checkbox of checkboxes) {
+            checkbox.checked = this.checked;
+        }
+    });
+
+    function generateImage() {
+        var selected = [];
+        document.querySelectorAll('input[name="contract_ids"]:checked').forEach(function (cb) {
+            selected.push(cb.value);
+        });
+
+        if (selected.length === 0) {
+            alert('الرجاء اختيار عقد واحد على الأقل');
+            return;
+        }
+
+        // Create form to post
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/admin/contracts/generate_image';
+        form.target = '_blank'; // Open in new tab
+
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'contract_ids';
+        input.value = selected.join(',');
+        form.appendChild(input);
+
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+    }
+</script>
+
+<!-- Modal -->
+<div class="modal fade" id="addContractModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">إضافة عقد جديد</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/admin/contracts/add" method="post">
+                <div class="mb-3">
+                    <label>التاريخ</label>
+                    <input type="date" name="contract_date" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label>سترايك (مثال: 6865 CALL)</label>
+                    <input type="text" name="strike" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label>سعر العقد (سعر الدخول)</label>
+                    <input type="number" step="0.01" name="contract_price" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label>سعر الإغلاق (سعر الخروج)</label>
+                    <input type="number" step="0.01" name="closing_price" class="form-control" required>
+                </div>
+                <p class="text-muted small">* سيتم حساب الربح/الخسارة/الصافي تلقائياً</p>
+                <!-- Net Profit calculated automatically on backend -->
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+            <button type="submit" class="btn btn-primary">حفظ</button>
+        </div>
+        </form>
+    </div>
+</div>
+</div>
+{% endblock %}

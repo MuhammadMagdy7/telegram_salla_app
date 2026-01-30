@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+aiogram
+asyncpg
+jinja2
+python-multipart
+pydantic-settings
+requests
+itsdangerous
+pytz
+Pillow
+arabic-reshaper
+python-bidi
+playwright
+webull
+psycopg2-binary
+python-dotenv

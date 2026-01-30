@@ -1,0 +1,18 @@
+[Unit]
+Description=FastAPI App for Telegram Salla Subscriptions
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+# Adjust path to where you cloned the repo
+WorkingDirectory=/opt/telegram-salla-app
+# Suggest using a venv
+Environment="PATH=/opt/telegram-salla-app/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/telegram-salla-app/.env
+ExecStart=/opt/telegram-salla-app/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+Restart=on-failure
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

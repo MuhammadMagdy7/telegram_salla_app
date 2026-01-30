@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Subscription Update Task
+
+[Service]
+Type=oneshot
+User=www-data
+WorkingDirectory=/opt/telegram-salla-app
+Environment="PATH=/opt/telegram-salla-app/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/telegram-salla-app/.env
+ExecStart=/opt/telegram-salla-app/venv/bin/python -m scripts.update_subscriptions

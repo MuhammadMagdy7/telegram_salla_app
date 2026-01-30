@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}لوحة التحكم{% endblock %}
+{% block content %}
+<h1 class="mb-4">لوحة المعلومات</h1>
+
+<!-- Stats Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card text-white bg-primary h-100">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="card-title">إجمالي المشتركين</h5>
+                    <h2 class="display-6 fw-bold">{{ total_subs }}</h2>
+                </div>
+                <i class="bi bi-people-fill fs-1 opacity-50"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white bg-success h-100">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="card-title">الاشتراكات النشطة</h5>
+                    <h2 class="display-6 fw-bold">{{ active_subs }}</h2>
+                </div>
+                <i class="bi bi-check-circle-fill fs-1 opacity-50"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-white bg-info h-100">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="card-title">مستخدمي البوت</h5>
+                    <h2 class="display-6 fw-bold">{{ users_count }}</h2>
+                </div>
+                <i class="bi bi-robot fs-1 opacity-50"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Recent Subscriptions -->
+    <div class="col-lg-12 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                <h5 class="mb-0 text-primary"><i class="bi bi-receipt"></i> آخر الاشتراكات</h5>
+                <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal"
+                    data-bs-target="#addSubModal">
+                    <i class="bi bi-plus-lg"></i> إضافة يدوي
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Telegram ID</th>
+                            <th>رقم الطلب</th>
+                            <th>الحالة</th>
+                            <th>ينتهي في</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sub in recent_subs %}
+                        <tr>
+                            <td>{{ sub.id }}</td>
+                            <td>{{ sub.telegram_user_id }}</td>
+                            <td><span class="badge bg-secondary">{{ sub.salla_order_id }}</span></td>
+                            <td>
+                                {% if sub.status == 'active' %}
+                                <span class="badge bg-success">نشط</span>
+                                {% else %}
+                                <span class="badge bg-danger">{{ sub.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ sub.end_date.strftime('%Y-%m-%d') if sub.end_date else '-' }}</td>
+                            <td>
+                                <form method="POST" action="/admin/subscriptions/delete" style="display:inline;"
+                                    onsubmit="return confirm('هل أنت متأكد من حذف هذا الاشتراك؟');">
+                                    <input type="hidden" name="subscription_id" value="{{ sub.id }}">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-3">لا توجد اشتراكات حديثة</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Users -->
+    <div class="col-lg-12 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 text-info"><i class="bi bi-people"></i> آخر المستخدمين المسجلين في البوت</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Telegram ID</th>
+                            <th>الاسم</th>
+                            <th>اسم المستخدم</th>
+                            <th>رقم الهاتف</th>
+                            <th>تاريخ الانضمام</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in recent_users %}
+                        <tr>
+                            <td>{{ user.telegram_user_id }}</td>
+                            <td>{{ user.telegram_full_name or '-' }}</td>
+                            <td>
+                                {% if user.telegram_username %}
+                                <a href="https://t.me/{{ user.telegram_username }}" target="_blank"
+                                    class="text-decoration-none">@{{ user.telegram_username }}</a>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>{{ user.phone_number or 'غير متوفر' }}</td>
+                            <td>{{ user.created_at.strftime('%Y-%m-%d') }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-3">لا يوجد مستخدمين بعد</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Sub Modal -->
+<div class="modal fade" id="addSubModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form class="modal-content" method="POST" action="/admin/subscriptions/add_manual">
+            <div class="modal-header">
+                <h5 class="modal-title">إضافة اشتراك يدوي</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">رقم الهاتف (مع مفتاح الدولة، مثال: 9665xxxxxxxx)</label>
+                    <input type="text" name="phone_number" class="form-control" placeholder="9665..." required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">المدة (بالأيام)</label>
+                    <input type="number" name="days" class="form-control" value="30" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <button type="submit" class="btn btn-success">إضافة اشتراك</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
