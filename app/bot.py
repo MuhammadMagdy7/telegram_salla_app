@@ -323,7 +323,7 @@ async def cb_new_subscription(callback: types.CallbackQuery):
     await callback.message.answer(
         "للاشتراك في خدماتنا، يرجى زيارة متجرنا:",
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="🛒 زيارة المتجر", url="https://salla.sa/investly11")],
+            [types.InlineKeyboardButton(text="🛒 زيارة المتجر", url=settings.SUBSCRIPTION_LINK)],
             [types.InlineKeyboardButton(text="🔙 رجوع", callback_data="menu_back")]
         ])
     )
@@ -335,7 +335,7 @@ async def cb_renew_subscription(callback: types.CallbackQuery):
     await callback.message.answer(
         "لتجديد اشتراكك، يمكنك زيارة المتجر:",
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="🔄 تجديد الاشتراك", url="https://salla.sa/investly11")],
+            [types.InlineKeyboardButton(text="🔄 تجديد الاشتراك", url=settings.SUBSCRIPTION_LINK)],
             [types.InlineKeyboardButton(text="🔙 رجوع", callback_data="menu_back")]
         ])
     )

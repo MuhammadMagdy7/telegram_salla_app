@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str
     SECRET_KEY: str = "supersecretkeychangeinproduction"
+    SUBSCRIPTION_LINK: str = "https://salla.sa/investly11"
 
     class Config:
         env_file = BASE_DIR / ".env"
