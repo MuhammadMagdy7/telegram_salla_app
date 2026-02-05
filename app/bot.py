@@ -520,6 +520,63 @@ async def send_notification(user_id: int, text: str):
     except Exception as e:
         logger.error(f"Failed to send message to {user_id}: {e}")
 
+async def send_subscription_invite(user_id: int, subscription_id: int = None):
+    """
+    Send a single-use invite link to user after manual subscription is added.
+    """
+    try:
+        # Check if user has active subscription
+        query = "SELECT * FROM subscriptions WHERE telegram_user_id = $1 AND status = 'active' AND end_date > NOW() ORDER BY end_date DESC LIMIT 1"
+        sub = await db.fetchrow(query, user_id)
+        
+        if not sub:
+            logger.warning(f"No active subscription found for user {user_id}")
+            return False
+        
+        # Check if user is already in the channel
+        try:
+            member = await bot.get_chat_member(settings.CHANNEL_ID, user_id)
+            if member.status in ['member', 'administrator', 'creator']:
+                # User already in channel, just notify them
+                await bot.send_message(
+                    user_id,
+                    "🎉 تم تفعيل اشتراكك بنجاح!\n\n✅ أنت بالفعل عضو في القناة."
+                )
+                return True
+        except Exception:
+            # User not in channel, continue to create link
+            pass
+        
+        # Create single-use invite link
+        chat_invite = await bot.create_chat_invite_link(
+            chat_id=settings.CHANNEL_ID,
+            member_limit=1,
+            name=f"ManualSub_{sub['id']}_{user_id}"
+        )
+        
+        # Store the link in the subscription
+        await db.execute(
+            "UPDATE subscriptions SET invite_link = $1 WHERE id = $2",
+            chat_invite.invite_link, sub['id']
+        )
+        
+        # Send message to user with invite link
+        end_date = sub['end_date'].strftime('%Y-%m-%d')
+        await bot.send_message(
+            user_id,
+            f"🎉 تم تفعيل اشتراكك بنجاح!\n\n"
+            f"📅 تاريخ انتهاء الاشتراك: {end_date}\n\n"
+            f"🔗 رابط الانضمام للقناة:\n{chat_invite.invite_link}\n\n"
+            f"⚠️ تنبيه: هذا الرابط صالح لمرة واحدة فقط."
+        )
+        
+        logger.info(f"Sent invite link to user {user_id} for subscription {sub['id']}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send subscription invite to {user_id}: {e}")
+        return False
+
 async def start_bot():
     # Set menu button
     await bot.set_my_commands([

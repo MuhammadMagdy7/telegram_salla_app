@@ -93,15 +93,19 @@ async def add_manual_subscription(
     if existing_user:
         # User exists, add subscription directly
         from app.services.subscription_manager import SubscriptionManager
+        from app.bot import send_subscription_invite
         # Generate fake order ID
         manual_order_id = f"MANUAL_{secrets.token_hex(4).upper()}"
         
         try:
-            await SubscriptionManager.create_subscription(existing_user['telegram_user_id'], manual_order_id, days)
-            # Notify user? (Ideally yes, but skipped for now or needs bot instance)
+            sub_result = await SubscriptionManager.create_subscription(existing_user['telegram_user_id'], manual_order_id, days)
+            
+            # Send invite link to user
+            if sub_result:
+                await send_subscription_invite(existing_user['telegram_user_id'])
         except Exception as e:
             # Handle unique constraint or other errors
-            pass 
+            print(f"Error adding manual subscription: {e}") 
     else:
         # User not found, add to pending
         await db.execute("""
