@@ -1,4 +1,5 @@
 import secrets
+import os
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 import io
@@ -13,6 +14,26 @@ from fastapi.templating import Jinja2Templates
 from datetime import datetime, timedelta
 from app.config import get_settings
 from app.db import db
+
+# Bundled Arabic font path (works on both Windows and Linux)
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_ARABIC_FONT = os.path.join(_BASE_DIR, 'static', 'fonts', 'IBMPlexSansArabic-Regular.ttf')
+_ARABIC_FONT_BOLD = os.path.join(_BASE_DIR, 'static', 'fonts', 'IBMPlexSansArabic-Bold.ttf')
+
+def _get_font(size):
+    """Get a font that supports Arabic text, with fallbacks."""
+    candidates = [
+        _ARABIC_FONT,
+        _ARABIC_FONT_BOLD,
+        'C:\\Windows\\Fonts\\arial.ttf',
+        'arial.ttf',
+    ]
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size)
+        except (IOError, OSError):
+            continue
+    return ImageFont.load_default()
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -289,16 +310,12 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
         d = ImageDraw.Draw(img)
         
         # Fonts
-        def get_font(size):
-            try: return ImageFont.truetype("arial.ttf", size)
-            except: return ImageFont.load_default()
-
-        fnt_title = get_font(32)
-        fnt_label = get_font(24)
-        fnt_val = get_font(28)
-        fnt_price = get_font(80)
-        fnt_net = get_font(60)
-        fnt_small = get_font(20)
+        fnt_title = _get_font(32)
+        fnt_label = _get_font(24)
+        fnt_val = _get_font(28)
+        fnt_price = _get_font(80)
+        fnt_net = _get_font(60)
+        fnt_small = _get_font(20)
         
         # --- Helper to draw Data Grid ---
         def draw_data_grid(draw, x_start, y_start, width, data_dict):
@@ -437,8 +454,8 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
         d = ImageDraw.Draw(img)
         
         try:
-            fnt_head = ImageFont.truetype("arial.ttf", 30)
-            fnt_row = ImageFont.truetype("arial.ttf", 24)
+            fnt_head = _get_font(30)
+            fnt_row = _get_font(24)
         except IOError:
             fnt_head = ImageFont.load_default()
             fnt_row = ImageFont.load_default()

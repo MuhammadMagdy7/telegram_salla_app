@@ -11,6 +11,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 # ReportLab & Arabic Support
+import os
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
@@ -19,16 +20,28 @@ from reportlab.lib import colors
 import arabic_reshaper
 from bidi.algorithm import get_display
 
-# Register Font logic (Try standard paths)
-try:
-    pdfmetrics.registerFont(TTFont('Arial', 'C:\\Windows\\Fonts\\arial.ttf'))
-    FONT_NAME = 'Arial'
-except:
-    try:
-        pdfmetrics.registerFont(TTFont('Arial', 'arial.ttf')) # Setup for relative path
-        FONT_NAME = 'Arial'
-    except:
-        FONT_NAME = 'Helvetica' # Fallback (No Arabic)
+# Register Font logic - Use bundled Arabic font (works on both Windows and Linux)
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_BUNDLED_FONT = os.path.join(_BASE_DIR, 'static', 'fonts', 'IBMPlexSansArabic-Regular.ttf')
+_BUNDLED_FONT_BOLD = os.path.join(_BASE_DIR, 'static', 'fonts', 'IBMPlexSansArabic-Bold.ttf')
+
+def _register_arabic_font():
+    """Register Arabic-supporting font for PDF generation."""
+    # Priority: Bundled font > Windows Arial > Helvetica fallback
+    font_candidates = [
+        ('ArabicFont', _BUNDLED_FONT),
+        ('ArabicFont', 'C:\\Windows\\Fonts\\arial.ttf'),
+        ('ArabicFont', 'arial.ttf'),
+    ]
+    for name, path in font_candidates:
+        try:
+            pdfmetrics.registerFont(TTFont(name, path))
+            return name
+        except:
+            continue
+    return 'Helvetica'
+
+FONT_NAME = _register_arabic_font()
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -149,8 +162,11 @@ async def handle_contact(message: types.Message):
 
 def reshape_text(text):
     if FONT_NAME == 'Helvetica': return text # No Arabic support
-    reshaped = arabic_reshaper.reshape(text)
-    return get_display(reshaped)
+    try:
+        reshaped = arabic_reshaper.reshape(str(text))
+        return get_display(reshaped)
+    except:
+        return str(text)
 
 async def generate_pdf_report(month_name: str, contracts: list) -> bytes:
     buffer = io.BytesIO()
