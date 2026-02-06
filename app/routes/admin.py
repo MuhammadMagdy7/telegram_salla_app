@@ -10,7 +10,7 @@ except ImportError:
     Image = None
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.config import get_settings
 from app.db import db
 
@@ -508,3 +508,265 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
     img_buffer.seek(0)
     return StreamingResponse(img_buffer, media_type="image/png")
 
+
+# ==================== REPORTS SECTION ====================
+
+@router.get("/reports", response_class=HTMLResponse)
+async def reports_page(
+    request: Request,
+    month: str = None,
+    from_date: str = None,
+    to_date: str = None
+):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/admin/login")
+    
+    # Get available months
+    months_query = """
+        SELECT DISTINCT TO_CHAR(contract_date, 'YYYY-MM') as month 
+        FROM option_contracts 
+        ORDER BY month DESC
+    """
+    months_result = await db.fetch(months_query)
+    available_months = [m['month'] for m in months_result]
+    
+    # Build query based on filters
+    query = "SELECT * FROM option_contracts WHERE 1=1"
+    args = []
+    arg_index = 1
+    
+    if month:
+        query += f" AND TO_CHAR(contract_date, 'YYYY-MM') = ${arg_index}"
+        args.append(month)
+        arg_index += 1
+    
+    if from_date:
+        query += f" AND contract_date >= ${arg_index}"
+        args.append(datetime.strptime(from_date, "%Y-%m-%d").date())
+        arg_index += 1
+    
+    if to_date:
+        query += f" AND contract_date <= ${arg_index}"
+        args.append(datetime.strptime(to_date, "%Y-%m-%d").date())
+        arg_index += 1
+    
+    query += " ORDER BY contract_date DESC"
+    
+    contracts = await db.fetch(query, *args)
+    
+    # Calculate totals
+    total_profit = sum(float(c['profit'] or 0) for c in contracts)
+    total_loss = sum(float(c['loss'] or 0) for c in contracts)
+    net_profit = sum(float(c['net_profit'] or 0) for c in contracts)
+    
+    # Get monthly summary
+    monthly_query = """
+        SELECT 
+            TO_CHAR(contract_date, 'YYYY-MM') as month,
+            COUNT(*) as count,
+            SUM(COALESCE(profit, 0)) as profit,
+            SUM(COALESCE(loss, 0)) as loss,
+            SUM(COALESCE(net_profit, 0)) as net
+        FROM option_contracts
+        GROUP BY TO_CHAR(contract_date, 'YYYY-MM')
+        ORDER BY month DESC
+    """
+    monthly_summary = await db.fetch(monthly_query)
+    
+    return templates.TemplateResponse("reports.html", {
+        "request": request,
+        "contracts": contracts,
+        "available_months": available_months,
+        "selected_month": month,
+        "from_date": from_date,
+        "to_date": to_date,
+        "total_profit": total_profit,
+        "total_loss": total_loss,
+        "net_profit": net_profit,
+        "monthly_summary": monthly_summary
+    })
+
+
+@router.post("/reports/download_pdf")
+async def download_pdf_report(
+    request: Request,
+    month: str = Form(None),
+    from_date: str = Form(None),
+    to_date: str = Form(None)
+):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/admin/login")
+    
+    # Build query
+    query = "SELECT * FROM option_contracts WHERE 1=1"
+    args = []
+    arg_index = 1
+    
+    if month:
+        query += f" AND TO_CHAR(contract_date, 'YYYY-MM') = ${arg_index}"
+        args.append(month)
+        arg_index += 1
+    
+    if from_date:
+        query += f" AND contract_date >= ${arg_index}"
+        args.append(datetime.strptime(from_date, "%Y-%m-%d").date())
+        arg_index += 1
+    
+    if to_date:
+        query += f" AND contract_date <= ${arg_index}"
+        args.append(datetime.strptime(to_date, "%Y-%m-%d").date())
+        arg_index += 1
+    
+    query += " ORDER BY contract_date DESC"
+    contracts = await db.fetch(query, *args)
+    
+    if not contracts:
+        return HTMLResponse("لا توجد صفقات في الفترة المحددة", status_code=404)
+    
+    # Generate PDF using the bot's PDF generator
+    from app.bot import generate_pdf_report
+    
+    report_name = month if month else "custom_range"
+    pdf_bytes = await generate_pdf_report(report_name, contracts)
+    
+    filename = f"report_{report_name}.pdf"
+    
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@router.post("/reports/send_telegram")
+async def send_report_to_telegram(
+    request: Request,
+    month: str = Form(None),
+    from_date: str = Form(None),
+    to_date: str = Form(None)
+):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/admin/login")
+    
+    # Build query
+    query = "SELECT * FROM option_contracts WHERE 1=1"
+    args = []
+    arg_index = 1
+    
+    if month:
+        query += f" AND TO_CHAR(contract_date, 'YYYY-MM') = ${arg_index}"
+        args.append(month)
+        arg_index += 1
+    
+    if from_date:
+        query += f" AND contract_date >= ${arg_index}"
+        args.append(datetime.strptime(from_date, "%Y-%m-%d").date())
+        arg_index += 1
+    
+    if to_date:
+        query += f" AND contract_date <= ${arg_index}"
+        args.append(datetime.strptime(to_date, "%Y-%m-%d").date())
+        arg_index += 1
+    
+    query += " ORDER BY contract_date DESC"
+    contracts = await db.fetch(query, *args)
+    
+    if not contracts:
+        return RedirectResponse(url="/admin/reports?error=no_contracts", status_code=303)
+    
+    # Generate PDF
+    from app.bot import generate_pdf_report, bot
+    from aiogram.types import BufferedInputFile
+    
+    report_name = month if month else "custom_range"
+    pdf_bytes = await generate_pdf_report(report_name, contracts)
+    
+    # Calculate totals for caption
+    total_profit = sum(float(c['profit'] or 0) for c in contracts)
+    total_loss = sum(float(c['loss'] or 0) for c in contracts)
+    net_profit = sum(float(c['net_profit'] or 0) for c in contracts)
+    
+    caption = f"📊 تقرير الصفقات - {report_name}\n\n"
+    caption += f"✅ إجمالي الربح: ${total_profit:.2f}\n"
+    caption += f"❌ إجمالي الخسارة: ${total_loss:.2f}\n"
+    caption += f"💰 صافي الربح: ${net_profit:.2f}\n"
+    caption += f"📈 عدد الصفقات: {len(contracts)}"
+    
+    # Send to channel
+    try:
+        file = BufferedInputFile(pdf_bytes, filename=f"report_{report_name}.pdf")
+        await bot.send_document(
+            chat_id=settings.CHANNEL_ID,
+            document=file,
+            caption=caption
+        )
+        return RedirectResponse(url="/admin/reports?success=sent", status_code=303)
+    except Exception as e:
+        return RedirectResponse(url=f"/admin/reports?error={str(e)}", status_code=303)
+
+
+@router.post("/reports/download_excel")
+async def download_excel_report(
+    request: Request,
+    month: str = Form(None),
+    from_date: str = Form(None),
+    to_date: str = Form(None)
+):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/admin/login")
+    
+    # Build query
+    query = "SELECT * FROM option_contracts WHERE 1=1"
+    args = []
+    arg_index = 1
+    
+    if month:
+        query += f" AND TO_CHAR(contract_date, 'YYYY-MM') = ${arg_index}"
+        args.append(month)
+        arg_index += 1
+    
+    if from_date:
+        query += f" AND contract_date >= ${arg_index}"
+        args.append(datetime.strptime(from_date, "%Y-%m-%d").date())
+        arg_index += 1
+    
+    if to_date:
+        query += f" AND contract_date <= ${arg_index}"
+        args.append(datetime.strptime(to_date, "%Y-%m-%d").date())
+        arg_index += 1
+    
+    query += " ORDER BY contract_date DESC"
+    contracts = await db.fetch(query, *args)
+    
+    if not contracts:
+        return HTMLResponse("لا توجد صفقات في الفترة المحددة", status_code=404)
+    
+    # Generate CSV (Excel compatible)
+    output = io.StringIO()
+    output.write("التاريخ,السترايك,سعر العقد,الربح,الخسارة,صافي الربح\n")
+    
+    for c in contracts:
+        output.write(f"{c['contract_date']},{c['strike']},{c['contract_price'] or 0},{c['profit'] or 0},{c['loss'] or 0},{c['net_profit'] or 0}\n")
+    
+    # Add totals
+    total_profit = sum(float(c['profit'] or 0) for c in contracts)
+    total_loss = sum(float(c['loss'] or 0) for c in contracts)
+    net_profit = sum(float(c['net_profit'] or 0) for c in contracts)
+    output.write(f"الإجمالي,,,{total_profit},{total_loss},{net_profit}\n")
+    
+    report_name = month if month else "custom_range"
+    filename = f"report_{report_name}.csv"
+    
+    # Convert to bytes with UTF-8 BOM for Excel Arabic support
+    csv_content = output.getvalue()
+    csv_bytes = b'\xef\xbb\xbf' + csv_content.encode('utf-8')
+    
+    return StreamingResponse(
+        io.BytesIO(csv_bytes),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

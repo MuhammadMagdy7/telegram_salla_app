@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}التقارير{% endblock %}
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h2><i class="bi bi-file-earmark-pdf"></i> التقارير الشهرية</h2>
+    </div>
+</div>
+
+<!-- Report Filters -->
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-funnel"></i> خيارات التقرير</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" action="/admin/reports" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">الشهر</label>
+                <select name="month" class="form-select">
+                    <option value="">كل الأشهر</option>
+                    {% for m in available_months %}
+                    <option value="{{ m }}" {% if selected_month == m %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">من تاريخ</label>
+                <input type="date" name="from_date" class="form-control" value="{{ from_date or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">إلى تاريخ</label>
+                <input type="date" name="to_date" class="form-control" value="{{ to_date or '' }}">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> عرض
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Summary Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-success h-100">
+            <div class="card-body text-center">
+                <h6 class="card-title">إجمالي الربح</h6>
+                <h3 class="fw-bold">${{ "%.2f"|format(total_profit) }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-danger h-100">
+            <div class="card-body text-center">
+                <h6 class="card-title">إجمالي الخسارة</h6>
+                <h3 class="fw-bold">${{ "%.2f"|format(total_loss) }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white {% if net_profit >= 0 %}bg-info{% else %}bg-warning{% endif %} h-100">
+            <div class="card-body text-center">
+                <h6 class="card-title">صافي الربح</h6>
+                <h3 class="fw-bold">${{ "%.2f"|format(net_profit) }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-secondary h-100">
+            <div class="card-body text-center">
+                <h6 class="card-title">عدد الصفقات</h6>
+                <h3 class="fw-bold">{{ contracts|length }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Buttons -->
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-download"></i> تصدير التقرير</h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-auto">
+                <form method="POST" action="/admin/reports/download_pdf" style="display:inline;">
+                    <input type="hidden" name="month" value="{{ selected_month or '' }}">
+                    <input type="hidden" name="from_date" value="{{ from_date or '' }}">
+                    <input type="hidden" name="to_date" value="{{ to_date or '' }}">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-file-earmark-pdf"></i> تحميل PDF
+                    </button>
+                </form>
+            </div>
+            <div class="col-auto">
+                <form method="POST" action="/admin/reports/send_telegram" style="display:inline;">
+                    <input type="hidden" name="month" value="{{ selected_month or '' }}">
+                    <input type="hidden" name="from_date" value="{{ from_date or '' }}">
+                    <input type="hidden" name="to_date" value="{{ to_date or '' }}">
+                    <button type="submit" class="btn btn-info">
+                        <i class="bi bi-telegram"></i> إرسال للقناة
+                    </button>
+                </form>
+            </div>
+            <div class="col-auto">
+                <form method="POST" action="/admin/reports/download_excel" style="display:inline;">
+                    <input type="hidden" name="month" value="{{ selected_month or '' }}">
+                    <input type="hidden" name="from_date" value="{{ from_date or '' }}">
+                    <input type="hidden" name="to_date" value="{{ to_date or '' }}">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-file-earmark-excel"></i> تحميل Excel
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Contracts Table -->
+<div class="card">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-table"></i> تفاصيل الصفقات</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>التاريخ</th>
+                        <th>السترايك</th>
+                        <th>سعر العقد</th>
+                        <th>الربح</th>
+                        <th>الخسارة</th>
+                        <th>صافي العقد</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for contract in contracts %}
+                    <tr>
+                        <td>{{ contract.contract_date }}</td>
+                        <td>{{ contract.strike }}</td>
+                        <td>${{ "%.2f"|format(contract.contract_price or 0) }}</td>
+                        <td class="text-success">${{ "%.2f"|format(contract.profit or 0) }}</td>
+                        <td class="text-danger">${{ "%.2f"|format(contract.loss or 0) }}</td>
+                        <td class="{% if (contract.net_profit or 0) >= 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
+                            ${{ "%.2f"|format(contract.net_profit or 0) }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">لا توجد صفقات في الفترة المحددة</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if contracts %}
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td colspan="3">الإجمالي</td>
+                        <td class="text-success">${{ "%.2f"|format(total_profit) }}</td>
+                        <td class="text-danger">${{ "%.2f"|format(total_loss) }}</td>
+                        <td class="{% if net_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            ${{ "%.2f"|format(net_profit) }}
+                        </td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly Summary -->
+{% if monthly_summary %}
+<div class="card mt-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="bi bi-bar-chart"></i> ملخص شهري</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>الشهر</th>
+                        <th>عدد الصفقات</th>
+                        <th>إجمالي الربح</th>
+                        <th>إجمالي الخسارة</th>
+                        <th>صافي الربح</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in monthly_summary %}
+                    <tr>
+                        <td>{{ m.month }}</td>
+                        <td>{{ m.count }}</td>
+                        <td class="text-success">${{ "%.2f"|format(m.profit) }}</td>
+                        <td class="text-danger">${{ "%.2f"|format(m.loss) }}</td>
+                        <td class="{% if m.net >= 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
+                            ${{ "%.2f"|format(m.net) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

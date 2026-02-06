@@ -49,7 +49,6 @@ def get_main_menu():
     """Generate main menu inline keyboard."""
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 تقارير الصفقات 📊", callback_data="menu_reports")],
         [
             InlineKeyboardButton(text="🟢 اشتراك جديد", callback_data="menu_new_sub"),
             InlineKeyboardButton(text="🔄 تجديد اشتراك", callback_data="menu_renew_sub")

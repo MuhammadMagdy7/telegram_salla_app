@@ -33,10 +33,17 @@ class Settings(BaseSettings):
     SALLA_SECRET: str
     APP_BASE_URL: str
     CHANNEL_ID: str = "-1001234567890" # Default placeholder, should be in env
+    TELEGRAM_GROUP_ID: str = ""  # Comma-separated group IDs
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str
     SECRET_KEY: str = "supersecretkeychangeinproduction"
     SUBSCRIPTION_LINK: str = "https://salla.sa/investly11"
+    
+    def get_group_ids(self) -> list:
+        """Parse comma-separated group IDs into a list."""
+        if not self.TELEGRAM_GROUP_ID:
+            return []
+        return [gid.strip() for gid in self.TELEGRAM_GROUP_ID.split(',') if gid.strip()]
 
     class Config:
         env_file = BASE_DIR / ".env"

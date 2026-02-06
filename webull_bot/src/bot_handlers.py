@@ -158,31 +158,6 @@ async def handle_remove_callback(callback: types.CallbackQuery):
         if db.remove_command(cmd_id):
             await callback.answer("🗑 تم الحذف")
             await callback.message.edit_text(f"🗑 تم حذف المراقبة رقم {cmd_id}.")
-            
-            # Send exit notification to group
-            if Config.TELEGRAM_GROUP_IDS:
-                try:
-                    type_ar = "🟢 كول 🟢" if str(cmd['contract_type']).upper().startswith('C') else "🔴 بوت 🔴"
-                    template_vars = {
-                        'symbol': cmd['symbol'],
-                        'strike': cmd['strike'],
-                        'expiration': cmd['expiration'],
-                        'type_ar': type_ar,
-                        'price': f"{price:.2f}"
-                    }
-                    exit_msg = get_template('exit_contract').format(**template_vars)
-                    
-                    for chat_id in Config.TELEGRAM_GROUP_IDS:
-                        try:
-                            await callback.bot.send_message(
-                                chat_id=chat_id,
-                                text=exit_msg,
-                                parse_mode="Markdown"
-                            )
-                        except Exception as inner_e:
-                            print(f"Failed to send exit notification to group {chat_id}: {inner_e}")
-                except Exception as e:
-                    print(f"Failed to send exit notification: {e}")
         else:
             await callback.answer("❌ لم يتم العثور على الأمر", show_alert=True)
     except Exception as e:
@@ -274,31 +249,6 @@ async def handle_delete_callback(callback: types.CallbackQuery):
         db.remove_command(cmd_id)
         await callback.answer("تم حذف المراقبة.")
         await callback.message.reply(f"🛑 تم إيقاف عملية المراقبة رقم {cmd_id} بنجاح.")
-        
-        # Send exit notification to group
-        if Config.TELEGRAM_GROUP_IDS:
-            try:
-                type_ar = "🟢 كول 🟢" if str(cmd['contract_type']).upper().startswith('C') else "🔴 بوت 🔴"
-                template_vars = {
-                    'symbol': cmd['symbol'],
-                    'strike': cmd['strike'],
-                    'expiration': cmd['expiration'],
-                    'type_ar': type_ar,
-                    'price': f"{price:.2f}"
-                }
-                exit_msg = get_template('exit_contract').format(**template_vars)
-                
-                for chat_id in Config.TELEGRAM_GROUP_IDS:
-                    try:
-                        await callback.bot.send_message(
-                            chat_id=chat_id,
-                            text=exit_msg,
-                            parse_mode="Markdown"
-                        )
-                    except Exception as inner_e:
-                        print(f"Failed to send exit notification to group {chat_id}: {inner_e}")
-            except Exception as e:
-                print(f"Failed to send exit notification: {e}")
     except Exception as e:
         await callback.answer(f"حدث خطأ: {e}", show_alert=True)
 
@@ -391,10 +341,6 @@ async def handle_gso_command(message: types.Message):
         # Sort by strike
         calls.sort(key=lambda x: x['strike'])
         puts.sort(key=lambda x: x['strike'])
-        
-        # Limit to 10 rows: first 10 calls, first 10 puts
-        calls = calls[:10]
-        puts = puts[:10]
         
         # Format Call Table with simple 3-digit ID
         call_table = "عقود الكول:\n"
@@ -838,31 +784,6 @@ async def cmd_remove(message: types.Message):
 
         if db.remove_command(cmd_id):
             await message.answer(f"🗑 تم حذف العملية رقم {cmd_id}.")
-            
-            # Send exit notification to group
-            if Config.TELEGRAM_GROUP_IDS:
-                try:
-                    type_ar = "🟢 كول 🟢" if str(cmd['contract_type']).upper().startswith('C') else "🔴 بوت 🔴"
-                    template_vars = {
-                        'symbol': cmd['symbol'],
-                        'strike': cmd['strike'],
-                        'expiration': cmd['expiration'],
-                        'type_ar': type_ar,
-                        'price': f"{price:.2f}"
-                    }
-                    exit_msg = get_template('exit_contract').format(**template_vars)
-                    
-                    for chat_id in Config.TELEGRAM_GROUP_IDS:
-                        try:
-                            await message.bot.send_message(
-                                chat_id=chat_id,
-                                text=exit_msg,
-                                parse_mode="Markdown"
-                            )
-                        except Exception as inner_e:
-                            print(f"Failed to send exit notification to group {chat_id}: {inner_e}")
-                except Exception as e:
-                    print(f"Failed to send exit notification: {e}")
         else:
             await message.answer(f"❌ لا توجد عملية بهذا الرقم: {cmd_id}")
     except (IndexError, ValueError):
@@ -1357,10 +1278,6 @@ async def show_chain_view(callback, symbol, expiry_days=None):
         
         calls.sort(key=lambda x: x['strike'])
         puts.sort(key=lambda x: x['strike'])
-        
-        # Limit to 10 rows: first 10 calls, last 10 puts
-        calls = calls[:10]
-        puts = puts[-10:]
         
         call_table = "عقود الكول:\n"
         call_table += "ID   Strike    Bid    Ask    Last   Vol\n"
