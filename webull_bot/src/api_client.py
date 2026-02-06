@@ -124,17 +124,27 @@ class MassiveAPIClient:
                         if type_key in target_row:
                             data = target_row[type_key]
                             
-                            # Extract Data
-                            last = float(data.get('close') or data.get('price') or 0)
+                            # Extract Data - Try multiple sources
+                            last = float(data.get('close') or data.get('price') or data.get('preClose') or 0)
                             
-                            # Bid/Ask are often in lists
+                            # Bid - Try multiple sources
                             bid = 0.0
-                            if 'bidList' in data and data['bidList']:
-                                bid = float(data['bidList'][0].get('price', 0))
+                            if 'bidList' in data and data['bidList'] and len(data['bidList']) > 0:
+                                bid = float(data['bidList'][0].get('price', 0) or 0)
+                            elif 'bid' in data:
+                                bid = float(data.get('bid', 0) or 0)
                             
+                            # Ask - Try multiple sources
                             ask = 0.0
-                            if 'askList' in data and data['askList']:
-                                ask = float(data['askList'][0].get('price', 0))
+                            if 'askList' in data and data['askList'] and len(data['askList']) > 0:
+                                ask = float(data['askList'][0].get('price', 0) or 0)
+                            elif 'ask' in data:
+                                ask = float(data.get('ask', 0) or 0)
+                            
+                            # If no bid/ask but we have last price, estimate
+                            if bid == 0 and ask == 0 and last > 0:
+                                bid = last * 0.95
+                                ask = last * 1.05
                                 
                             volume = int(data.get('volume') or 0)
                             oi = int(data.get('openInterest') or 0)
@@ -211,15 +221,26 @@ class MassiveAPIClient:
 
     def _parse_webull_option_data(self, data):
         """Helper to parse a single option data dict from Webull chain."""
-        last = float(data.get('close') or data.get('price') or 0)
+        last = float(data.get('close') or data.get('price') or data.get('preClose') or 0)
         
         bid = 0.0
-        if 'bidList' in data and data['bidList']:
-            bid = float(data['bidList'][0].get('price', 0))
+        # Try multiple sources for bid
+        if 'bidList' in data and data['bidList'] and len(data['bidList']) > 0:
+            bid = float(data['bidList'][0].get('price', 0) or 0)
+        elif 'bid' in data:
+            bid = float(data.get('bid', 0) or 0)
         
         ask = 0.0
-        if 'askList' in data and data['askList']:
-            ask = float(data['askList'][0].get('price', 0))
+        # Try multiple sources for ask
+        if 'askList' in data and data['askList'] and len(data['askList']) > 0:
+            ask = float(data['askList'][0].get('price', 0) or 0)
+        elif 'ask' in data:
+            ask = float(data.get('ask', 0) or 0)
+        
+        # If no bid/ask but we have last price, estimate
+        if bid == 0 and ask == 0 and last > 0:
+            bid = last * 0.95
+            ask = last * 1.05
             
         volume = int(data.get('volume') or 0)
         oi = int(data.get('openInterest') or 0)
@@ -293,6 +314,39 @@ class MassiveAPIClient:
             logger.error(f"Error fetching expirations: {e}")
             return []
 
+    def _fetch_option_quotes_batch(self, derivative_ids):
+        """Fetch real-time quotes for multiple options using their derivative IDs."""
+        try:
+            if not derivative_ids:
+                return {}
+            
+            # Use Webull's batch quote API
+            url = 'https://quotes-gw.webullfintech.com/api/quote/option/quotes/queryBatch'
+            headers = self.wb._headers
+            
+            # Split into batches of 50 to avoid API limits
+            batch_size = 50
+            all_quotes = {}
+            
+            for i in range(0, len(derivative_ids), batch_size):
+                batch_ids = derivative_ids[i:i+batch_size]
+                params = {'derivativeIds': ','.join(map(str, batch_ids))}
+                
+                response = requests.get(url, params=params, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if isinstance(data, list):
+                        for item in data:
+                            ticker_id = item.get('tickerId')
+                            if ticker_id:
+                                all_quotes[ticker_id] = item
+            
+            return all_quotes
+        except Exception as e:
+            logger.error(f"Error fetching batch option quotes: {e}")
+            return {}
+
     async def get_option_chain(self, symbol, expiry_days_target=None):
         """Fetch option chain for a symbol using Webull."""
         try:
@@ -361,6 +415,30 @@ class MassiveAPIClient:
                     # Get Chain for this expiration (Explicitly)
                     chain = self.wb.get_options(stock=search_symbol, expireDate=target_date)
                     
+                    # Collect all derivative IDs to fetch real-time quotes
+                    derivative_ids = []
+                    for row in chain:
+                        if 'call' in row and row['call'].get('tickerId'):
+                            derivative_ids.append(row['call']['tickerId'])
+                        if 'put' in row and row['put'].get('tickerId'):
+                            derivative_ids.append(row['put']['tickerId'])
+                    
+                    # Fetch real-time quotes for all options in batch
+                    quotes_map = self._fetch_option_quotes_batch(derivative_ids)
+                    
+                    # Merge quotes back into chain data
+                    for row in chain:
+                        if 'call' in row:
+                            ticker_id = row['call'].get('tickerId')
+                            if ticker_id and ticker_id in quotes_map:
+                                # Update call data with real-time quote
+                                row['call'].update(quotes_map[ticker_id])
+                        if 'put' in row:
+                            ticker_id = row['put'].get('tickerId')
+                            if ticker_id and ticker_id in quotes_map:
+                                # Update put data with real-time quote
+                                row['put'].update(quotes_map[ticker_id])
+                    
                     return chain, current_price
                 except Exception as e:
                     logger.error(f"Webull chain fetch error: {e}")
@@ -403,16 +481,54 @@ class MassiveAPIClient:
                  if 'call' in best_atm_row:
                      c_bid = 0
                      c_ask = 0
-                     if 'bidList' in best_atm_row['call']: c_bid = float(best_atm_row['call']['bidList'][0]['price'])
-                     if 'askList' in best_atm_row['call']: c_ask = float(best_atm_row['call']['askList'][0]['price'])
+                     c_data = best_atm_row['call']
+                     
+                     # Try multiple sources for bid
+                     if 'bidList' in c_data and c_data['bidList'] and len(c_data['bidList']) > 0:
+                         c_bid = float(c_data['bidList'][0].get('price', 0) or 0)
+                     elif 'bid' in c_data:
+                         c_bid = float(c_data.get('bid', 0) or 0)
+                     
+                     # Try multiple sources for ask
+                     if 'askList' in c_data and c_data['askList'] and len(c_data['askList']) > 0:
+                         c_ask = float(c_data['askList'][0].get('price', 0) or 0)
+                     elif 'ask' in c_data:
+                         c_ask = float(c_data.get('ask', 0) or 0)
+                     
+                     # Fallback to close/price if no bid/ask
+                     if c_bid == 0 and c_ask == 0:
+                         c_last = float(c_data.get('close') or c_data.get('price') or c_data.get('preClose') or 0)
+                         if c_last > 0:
+                             c_bid = c_last
+                             c_ask = c_last
+                     
                      mid = (c_bid + c_ask) / 2
                      entry_call = atm_strike + mid
                 
                  if 'put' in best_atm_row:
                      p_bid = 0
                      p_ask = 0
-                     if 'bidList' in best_atm_row['put']: p_bid = float(best_atm_row['put']['bidList'][0]['price'])
-                     if 'askList' in best_atm_row['put']: p_ask = float(best_atm_row['put']['askList'][0]['price'])
+                     p_data = best_atm_row['put']
+                     
+                     # Try multiple sources for bid
+                     if 'bidList' in p_data and p_data['bidList'] and len(p_data['bidList']) > 0:
+                         p_bid = float(p_data['bidList'][0].get('price', 0) or 0)
+                     elif 'bid' in p_data:
+                         p_bid = float(p_data.get('bid', 0) or 0)
+                     
+                     # Try multiple sources for ask
+                     if 'askList' in p_data and p_data['askList'] and len(p_data['askList']) > 0:
+                         p_ask = float(p_data['askList'][0].get('price', 0) or 0)
+                     elif 'ask' in p_data:
+                         p_ask = float(p_data.get('ask', 0) or 0)
+                     
+                     # Fallback to close/price if no bid/ask
+                     if p_bid == 0 and p_ask == 0:
+                         p_last = float(p_data.get('close') or p_data.get('price') or p_data.get('preClose') or 0)
+                         if p_last > 0:
+                             p_bid = p_last
+                             p_ask = p_last
+                     
                      mid = (p_bid + p_ask) / 2
                      entry_put = atm_strike - mid
 
@@ -424,8 +540,27 @@ class MassiveAPIClient:
                     c_data = row['call']
                     c_bid = 0
                     c_ask = 0
-                    if 'bidList' in c_data: c_bid = float(c_data['bidList'][0]['price'])
-                    if 'askList' in c_data: c_ask = float(c_data['askList'][0]['price'])
+                    c_last = 0
+                    
+                    # Try multiple sources for bid
+                    if 'bidList' in c_data and c_data['bidList'] and len(c_data['bidList']) > 0:
+                        c_bid = float(c_data['bidList'][0].get('price', 0) or 0)
+                    elif 'bid' in c_data:
+                        c_bid = float(c_data.get('bid', 0) or 0)
+                    
+                    # Try multiple sources for ask
+                    if 'askList' in c_data and c_data['askList'] and len(c_data['askList']) > 0:
+                        c_ask = float(c_data['askList'][0].get('price', 0) or 0)
+                    elif 'ask' in c_data:
+                        c_ask = float(c_data.get('ask', 0) or 0)
+                    
+                    # Try multiple sources for last price
+                    c_last = float(c_data.get('close') or c_data.get('price') or c_data.get('preClose') or 0)
+                    
+                    # If no bid/ask but we have last price, estimate from last
+                    if c_bid == 0 and c_ask == 0 and c_last > 0:
+                        c_bid = c_last * 0.95  # Estimate bid at 95% of last
+                        c_ask = c_last * 1.05  # Estimate ask at 105% of last
                     
                     result.append({
                         "contract_id": c_data.get('symbol'),
@@ -433,7 +568,7 @@ class MassiveAPIClient:
                         "type": 'C',
                         "bid": c_bid,
                         "ask": c_ask,
-                        "last": float(c_data.get('close') or c_data.get('price') or 0),
+                        "last": c_last,
                         "volume": int(c_data.get('volume') or 0)
                     })
                 
@@ -442,8 +577,27 @@ class MassiveAPIClient:
                     p_data = row['put']
                     p_bid = 0
                     p_ask = 0
-                    if 'bidList' in p_data: p_bid = float(p_data['bidList'][0]['price'])
-                    if 'askList' in p_data: p_ask = float(p_data['askList'][0]['price'])
+                    p_last = 0
+                    
+                    # Try multiple sources for bid
+                    if 'bidList' in p_data and p_data['bidList'] and len(p_data['bidList']) > 0:
+                        p_bid = float(p_data['bidList'][0].get('price', 0) or 0)
+                    elif 'bid' in p_data:
+                        p_bid = float(p_data.get('bid', 0) or 0)
+                    
+                    # Try multiple sources for ask
+                    if 'askList' in p_data and p_data['askList'] and len(p_data['askList']) > 0:
+                        p_ask = float(p_data['askList'][0].get('price', 0) or 0)
+                    elif 'ask' in p_data:
+                        p_ask = float(p_data.get('ask', 0) or 0)
+                    
+                    # Try multiple sources for last price
+                    p_last = float(p_data.get('close') or p_data.get('price') or p_data.get('preClose') or 0)
+                    
+                    # If no bid/ask but we have last price, estimate from last
+                    if p_bid == 0 and p_ask == 0 and p_last > 0:
+                        p_bid = p_last * 0.95  # Estimate bid at 95% of last
+                        p_ask = p_last * 1.05  # Estimate ask at 105% of last
                     
                     result.append({
                         "contract_id": p_data.get('symbol'),
@@ -451,7 +605,7 @@ class MassiveAPIClient:
                         "type": 'P',
                         "bid": p_bid,
                         "ask": p_ask,
-                        "last": float(p_data.get('close') or p_data.get('price') or 0),
+                        "last": p_last,
                         "volume": int(p_data.get('volume') or 0)
                     })
             
