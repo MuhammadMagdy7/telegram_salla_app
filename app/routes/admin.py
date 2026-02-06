@@ -391,8 +391,10 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
         y = padding
         d.rounded_rectangle([padding, y, img_width - padding, y + card_height], radius=15, fill=COLOR_CARD, outline=COLOR_BORDER)
         
-        # Header
-        d.text((img_width/2, y + 40), ar(f"🔹 بداية العقد  - {strike}"), font=fnt_title, fill=COLOR_ACCENT, anchor="ms")
+        # Header - draw Arabic and English parts separately
+        entry_ar = ar("بداية العقد")
+        header_text = f"{strike}  -  {entry_ar}"
+        d.text((img_width/2, y + 40), header_text, font=fnt_title, fill=COLOR_ACCENT, anchor="ms")
         d.text((100, y + 150), f"${entry_price:.2f}", font=fnt_price, fill=COLOR_TEXT_PRIMARY, anchor="ls")
         d.text((100, y + 180), "ENTRY PRICE", font=fnt_small, fill=COLOR_TEXT_SECONDARY, anchor="ls")
         
@@ -405,7 +407,9 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
         d.rounded_rectangle([padding, y, img_width - padding, y + card_height], radius=15, fill=COLOR_CARD, outline=COLOR_BORDER)
         
         exit_color = COLOR_GREEN if net_profit >= 0 else COLOR_RED
-        d.text((img_width/2, y + 40), ar(f"🔸 نهاية العقد  - {strike}"), font=fnt_title, fill=exit_color, anchor="ms")
+        exit_ar = ar("نهاية العقد")
+        exit_header = f"{strike}  -  {exit_ar}"
+        d.text((img_width/2, y + 40), exit_header, font=fnt_title, fill=exit_color, anchor="ms")
         d.text((100, y + 150), f"${exit_price:.2f}", font=fnt_price, fill=exit_color, anchor="ls")
         d.text((100, y + 180), "EXIT PRICE", font=fnt_small, fill=COLOR_TEXT_SECONDARY, anchor="ls")
         
@@ -424,8 +428,8 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
             logo_path = os.path.join(os.path.dirname(__file__), "..", "..", "static", "logo.png")
             if os.path.exists(logo_path):
                 logo = Image.open(logo_path)
-                logo.thumbnail((120, 80), Image.LANCZOS)
-                logo_x = img_width - padding - logo.width - 30
+                logo.thumbnail((180, 140), Image.LANCZOS)
+                logo_x = img_width - padding - logo.width - 20
                 logo_y = y + (net_height - logo.height) // 2
                 img.paste(logo, (logo_x, logo_y), logo if logo.mode=='RGBA' else None)
                 logo_loaded = True
@@ -437,7 +441,8 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
             d.text((img_width - padding - 100, y + net_height // 2), "INVESTLY", font=fnt_title, fill=COLOR_GOLD, anchor="mm")
         
         # Net profit text (centered-left to make room for logo)
-        d.text((padding + 200, y + 40), ar("💰 صافي الربح"), font=fnt_title, fill=COLOR_GOLD, anchor="ms")
+        net_label = ar("صافي الربح")
+        d.text((padding + 200, y + 40), net_label, font=fnt_title, fill=COLOR_GOLD, anchor="ms")
         net_sign = "+" if net_profit >= 0 else ""
         d.text((padding + 200, y + 110), f"{net_sign}${net_profit:.2f}", font=fnt_net, fill=exit_color, anchor="ms")
 
@@ -517,7 +522,8 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
         y += 40
         
         total_net = sum(c['net_profit'] for c in contracts)
-        d.text((img_width/2, y), ar(f"إجمالي أرباح القناة اليوم: {total_net}"), font=fnt_head, fill=(255, 215, 0), anchor="ms")
+        footer_ar = ar("إجمالي أرباح القناة اليوم")
+        d.text((img_width/2, y), f"{total_net} :{footer_ar}", font=fnt_head, fill=(255, 215, 0), anchor="ms")
 
         img.save(img_buffer, format='PNG')
 
