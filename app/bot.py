@@ -22,13 +22,14 @@ from bidi.algorithm import get_display
 
 # Register Font logic - Use bundled Arabic font (works on both Windows and Linux)
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_BUNDLED_AMIRI = os.path.join(_BASE_DIR, 'static', 'fonts', 'Amiri-Regular.ttf')
 _BUNDLED_FONT = os.path.join(_BASE_DIR, 'static', 'fonts', 'IBMPlexSansArabic-Regular.ttf')
-_BUNDLED_FONT_BOLD = os.path.join(_BASE_DIR, 'static', 'fonts', 'IBMPlexSansArabic-Bold.ttf')
 
 def _register_arabic_font():
     """Register Arabic-supporting font for PDF generation."""
-    # Priority: Bundled font > Windows Arial > Helvetica fallback
+    # Priority: Amiri (best Arabic) > IBM Plex > Windows Arial > Helvetica fallback
     font_candidates = [
+        ('ArabicFont', _BUNDLED_AMIRI),
         ('ArabicFont', _BUNDLED_FONT),
         ('ArabicFont', 'C:\\Windows\\Fonts\\arial.ttf'),
         ('ArabicFont', 'arial.ttf'),

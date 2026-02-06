@@ -1,10 +1,11 @@
 import secrets
 import os
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 import io
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFont, features as pil_features
     import arabic_reshaper
     from bidi.algorithm import get_display
 except ImportError:
@@ -15,14 +16,31 @@ from datetime import datetime, timedelta
 from app.config import get_settings
 from app.db import db
 
+_logger = logging.getLogger(__name__)
+
 # Bundled Arabic font path (works on both Windows and Linux)
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_AMIRI_FONT = os.path.join(_BASE_DIR, 'static', 'fonts', 'Amiri-Regular.ttf')
+_AMIRI_FONT_BOLD = os.path.join(_BASE_DIR, 'static', 'fonts', 'Amiri-Bold.ttf')
 _ARABIC_FONT = os.path.join(_BASE_DIR, 'static', 'fonts', 'IBMPlexSansArabic-Regular.ttf')
 _ARABIC_FONT_BOLD = os.path.join(_BASE_DIR, 'static', 'fonts', 'IBMPlexSansArabic-Bold.ttf')
+
+# Check if Pillow has raqm/harfbuzz support for native Arabic shaping
+HAS_RAQM = False
+try:
+    if Image and pil_features.check('raqm'):
+        HAS_RAQM = True
+        _logger.info("Pillow raqm support detected - using native Arabic text shaping")
+    else:
+        _logger.warning("Pillow raqm not available - using arabic_reshaper fallback")
+except:
+    pass
 
 def _get_font(size):
     """Get a font that supports Arabic text, with fallbacks."""
     candidates = [
+        _AMIRI_FONT,
+        _AMIRI_FONT_BOLD,
         _ARABIC_FONT,
         _ARABIC_FONT_BOLD,
         'C:\\Windows\\Fonts\\arial.ttf',
@@ -34,6 +52,23 @@ def _get_font(size):
         except (IOError, OSError):
             continue
     return ImageFont.load_default()
+
+def _draw_ar(draw, position, text, font, fill, anchor='ms'):
+    """Draw Arabic text with proper shaping. Uses raqm if available, otherwise arabic_reshaper."""
+    if not text:
+        return
+    text = str(text)
+    if HAS_RAQM:
+        # Native Arabic shaping via harfbuzz/raqm - best quality
+        draw.text(position, text, font=font, fill=fill, anchor=anchor, direction='rtl')
+    else:
+        # Fallback: reshape + bidi
+        try:
+            reshaped = arabic_reshaper.reshape(text)
+            bidi_text = get_display(reshaped)
+        except:
+            bidi_text = text
+        draw.text(position, bidi_text, font=font, fill=fill, anchor=anchor)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -275,7 +310,7 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
 
     img_buffer = io.BytesIO()
     
-    # Helper for Arabic text
+    # Helper for Arabic text (legacy - for simple string transforms)
     def ar(text):
         if not text: return ""
         try:
@@ -391,10 +426,8 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
         y = padding
         d.rounded_rectangle([padding, y, img_width - padding, y + card_height], radius=15, fill=COLOR_CARD, outline=COLOR_BORDER)
         
-        # Header - draw Arabic and English parts separately
-        entry_ar = ar("بداية العقد")
-        header_text = f"{strike}  -  {entry_ar}"
-        d.text((img_width/2, y + 40), header_text, font=fnt_title, fill=COLOR_ACCENT, anchor="ms")
+        # Header - Arabic title + English strike
+        _draw_ar(d, (img_width/2, y + 40), f"🔹 بداية العقد  - {strike}", font=fnt_title, fill=COLOR_ACCENT, anchor="ms")
         d.text((100, y + 150), f"${entry_price:.2f}", font=fnt_price, fill=COLOR_TEXT_PRIMARY, anchor="ls")
         d.text((100, y + 180), "ENTRY PRICE", font=fnt_small, fill=COLOR_TEXT_SECONDARY, anchor="ls")
         
@@ -407,9 +440,7 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
         d.rounded_rectangle([padding, y, img_width - padding, y + card_height], radius=15, fill=COLOR_CARD, outline=COLOR_BORDER)
         
         exit_color = COLOR_GREEN if net_profit >= 0 else COLOR_RED
-        exit_ar = ar("نهاية العقد")
-        exit_header = f"{strike}  -  {exit_ar}"
-        d.text((img_width/2, y + 40), exit_header, font=fnt_title, fill=exit_color, anchor="ms")
+        _draw_ar(d, (img_width/2, y + 40), f"🔸 نهاية العقد  - {strike}", font=fnt_title, fill=exit_color, anchor="ms")
         d.text((100, y + 150), f"${exit_price:.2f}", font=fnt_price, fill=exit_color, anchor="ls")
         d.text((100, y + 180), "EXIT PRICE", font=fnt_small, fill=COLOR_TEXT_SECONDARY, anchor="ls")
         
@@ -441,8 +472,7 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
             d.text((img_width - padding - 100, y + net_height // 2), "INVESTLY", font=fnt_title, fill=COLOR_GOLD, anchor="mm")
         
         # Net profit text (centered-left to make room for logo)
-        net_label = ar("صافي الربح")
-        d.text((padding + 200, y + 40), net_label, font=fnt_title, fill=COLOR_GOLD, anchor="ms")
+        _draw_ar(d, (padding + 200, y + 40), "💰 صافي الربح", font=fnt_title, fill=COLOR_GOLD, anchor="ms")
         net_sign = "+" if net_profit >= 0 else ""
         d.text((padding + 200, y + 110), f"{net_sign}${net_profit:.2f}", font=fnt_net, fill=exit_color, anchor="ms")
 
@@ -472,19 +502,14 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
         # Column 1 (Rightmost): Date. Column 6 (Leftmost): Net.
         # Let's map X coordinates to this.
         
-        headers = ["التاريخ", "العقد", "سعر العقد", "الربح", "الخسارة", "الصافي"]
-        headers = [ar(h) for h in headers]
+        headers_raw = ["التاريخ", "العقد", "سعر العقد", "الربح", "الخسارة", "الصافي"]
         
         # X Coords (Right to Left distribution)
-        # Old X: [50, 200, 450, 600, 750, 900] (Left -> Right)
-        # We want Col 1 (Date) at 900 approx.
-        # Col 6 (Net) at 50 approx.
         col_x = [900, 750, 550, 400, 250, 80]
         
         y = 40
-        for i, h in enumerate(headers):
-            # i=0 (Date) -> col_x[0]=900
-            d.text((col_x[i], y), h, font=fnt_head, fill=(255, 215, 0), anchor="ms") # Centered on X
+        for i, h in enumerate(headers_raw):
+            _draw_ar(d, (col_x[i], y), h, font=fnt_head, fill=(255, 215, 0), anchor="ms")
             
         d.line((20, 90, img_width-20, 90), fill=(100, 100, 100), width=2)
             
@@ -511,8 +536,7 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
                 if i == 5: color = (0, 255, 0) if net >= 0 else (255, 0, 0)
                 
                 # Reshape val (numbers mostly, but good to be safe)
-                val_ar = ar(val)
-                d.text((col_x[i], y), val_ar, font=fnt_row, fill=color, anchor="ms")
+                d.text((col_x[i], y), str(val), font=fnt_row, fill=color, anchor="ms")
             
             y += row_height
 
@@ -522,8 +546,7 @@ async def generate_contract_image(request: Request, contract_ids: str = Form(...
         y += 40
         
         total_net = sum(c['net_profit'] for c in contracts)
-        footer_ar = ar("إجمالي أرباح القناة اليوم")
-        d.text((img_width/2, y), f"{total_net} :{footer_ar}", font=fnt_head, fill=(255, 215, 0), anchor="ms")
+        _draw_ar(d, (img_width/2, y), f"إجمالي أرباح القناة اليوم: {total_net}", font=fnt_head, fill=(255, 215, 0), anchor="ms")
 
         img.save(img_buffer, format='PNG')
 
