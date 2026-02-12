@@ -254,14 +254,14 @@ async def add_contract(
     
     if closing_price >= contract_price:
         # Profit or breakeven
-        profit = closing_price  # Store closing price in profit column
+        profit = round(closing_price, 2)  # Store closing price in profit column
         loss = 0
-        net_profit = closing_price - contract_price
+        net_profit = round(closing_price - contract_price, 2)
     else:
         # Loss
         profit = 0
-        loss = contract_price - closing_price
-        net_profit = -loss
+        loss = round(contract_price - closing_price, 2)
+        net_profit = round(-loss, 2)
         
     await db.execute(
         "INSERT INTO option_contracts (contract_date, strike, contract_price, profit, loss, net_profit) VALUES ($1, $2, $3, $4, $5, $6)",
@@ -796,7 +796,7 @@ async def download_excel_report(
     output.write("التاريخ,السترايك,سعر العقد,الربح,الخسارة,صافي الربح\n")
     
     for c in contracts:
-        output.write(f"{c['contract_date']},{c['strike']},{c['contract_price'] or 0},{c['profit'] or 0},{c['loss'] or 0},{c['net_profit'] or 0}\n")
+        output.write(f"{c['contract_date']},{c['strike']},{round(c['contract_price'] or 0, 2)},{round(c['profit'] or 0, 2)},{round(c['loss'] or 0, 2)},{round(c['net_profit'] or 0, 2)}\n")
     
     # Add totals
     total_profit = sum(float(c['profit'] or 0) for c in contracts)

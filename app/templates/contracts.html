@@ -45,11 +45,11 @@
                                 class="form-check-input"></td>
                         <td>{{ contract.contract_date }}</td>
                         <td>{{ contract.strike }}</td>
-                        <td>{{ contract.contract_price }}</td>
-                        <td class="text-success">{{ contract.profit }}</td>
-                        <td class="text-danger">{{ contract.loss }}</td>
+                        <td>{{ (contract.contract_price or 0) | round(2) }}</td>
+                        <td class="text-success">{{ (contract.profit or 0) | round(2) }}</td>
+                        <td class="text-danger">{{ (contract.loss or 0) | round(2) }}</td>
                         <td class="{% if contract.net_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
-                            {{ contract.net_profit }}
+                            {{ (contract.net_profit or 0) | round(2) }}
                         </td>
                         <td>
                             <form action="/admin/contracts/delete" method="post" style="display:inline;">
