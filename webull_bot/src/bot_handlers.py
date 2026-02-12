@@ -347,14 +347,16 @@ async def handle_gso_command(message: types.Message):
         call_table += "ID   Strike    Bid    Ask    Last   Vol\n"
         call_table += "────────────────────────────────────\n"
         for c in calls:
-             call_table += f"{c['simple_id']:<3}  {c['strike']:<8.0f} {c['bid']:<6.2f} {c['ask']:<6.2f} {c['last']:<6.2f} {c['volume']:,}\n"
+             strike_str = f"{c['strike']:g}"
+             call_table += f"{c['simple_id']:<3}  {strike_str:<8} {c['bid']:<6.2f} {c['ask']:<6.2f} {c['last']:<6.2f} {c['volume']:,}\n"
 
         # Format Put Table with simple 3-digit ID
         put_table = "عقود البوت:\n"
         put_table += "ID   Strike    Bid    Ask    Last   Vol\n"
         put_table += "────────────────────────────────────\n"
         for c in puts:
-             put_table += f"{c['simple_id']:<3}  {c['strike']:<8.0f} {c['bid']:<6.2f} {c['ask']:<6.2f} {c['last']:<6.2f} {c['volume']:,}\n"
+             strike_str = f"{c['strike']:g}"
+             put_table += f"{c['simple_id']:<3}  {strike_str:<8} {c['bid']:<6.2f} {c['ask']:<6.2f} {c['last']:<6.2f} {c['volume']:,}\n"
 
         entry_msg = f"🟢 دخول الكول : {entry_call:.2f}\n🔴 دخول البوت : {entry_put:.2f}"
         summary_msg = f"📊 *{symbol}* - استخدم `/x <ID>` للمراقبة"
@@ -1283,13 +1285,15 @@ async def show_chain_view(callback, symbol, expiry_days=None):
         call_table += "ID   Strike    Bid    Ask    Last   Vol\n"
         call_table += "────────────────────────────────────\n"
         for c in calls:
-             call_table += f"{c['simple_id']:<3}  {c['strike']:<8.0f} {c['bid']:<6.2f} {c['ask']:<6.2f} {c['last']:<6.2f} {c['volume']:,}\n"
+             strike_str = f"{c['strike']:g}"
+             call_table += f"{c['simple_id']:<3}  {strike_str:<8} {c['bid']:<6.2f} {c['ask']:<6.2f} {c['last']:<6.2f} {c['volume']:,}\n"
 
         put_table = "عقود البوت:\n"
         put_table += "ID   Strike    Bid    Ask    Last   Vol\n"
         put_table += "────────────────────────────────────\n"
         for c in puts:
-             put_table += f"{c['simple_id']:<3}  {c['strike']:<8.0f} {c['bid']:<6.2f} {c['ask']:<6.2f} {c['last']:<6.2f} {c['volume']:,}\n"
+             strike_str = f"{c['strike']:g}"
+             put_table += f"{c['simple_id']:<3}  {strike_str:<8} {c['bid']:<6.2f} {c['ask']:<6.2f} {c['last']:<6.2f} {c['volume']:,}\n"
 
         entry_msg = f"🟢 دخول الكول : {entry_call:.2f}\n🔴 دخول البوت : {entry_put:.2f}"
         summary_msg = f"📊 *{symbol}* {msg_extra} - استخدم `/x <ID>` للمراقبة"

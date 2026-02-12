@@ -111,31 +111,31 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form action="/admin/contracts/add" method="post">
-                <div class="mb-3">
-                    <label>التاريخ</label>
-                    <input type="date" name="contract_date" class="form-control" required>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label>التاريخ</label>
+                        <input type="date" name="contract_date" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>سترايك (مثال: 6865 CALL)</label>
+                        <input type="text" name="strike" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>سعر العقد (سعر الدخول)</label>
+                        <input type="number" step="0.01" name="contract_price" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>سعر الإغلاق (سعر الخروج)</label>
+                        <input type="number" step="0.01" name="closing_price" class="form-control" required>
+                    </div>
+                    <p class="text-muted small">* سيتم حساب الربح/الخسارة/الصافي تلقائياً</p>
                 </div>
-                <div class="mb-3">
-                    <label>سترايك (مثال: 6865 CALL)</label>
-                    <input type="text" name="strike" class="form-control" required>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                    <button type="submit" class="btn btn-primary">حفظ</button>
                 </div>
-                <div class="mb-3">
-                    <label>سعر العقد (سعر الدخول)</label>
-                    <input type="number" step="0.01" name="contract_price" class="form-control" required>
-                </div>
-                <div class="mb-3">
-                    <label>سعر الإغلاق (سعر الخروج)</label>
-                    <input type="number" step="0.01" name="closing_price" class="form-control" required>
-                </div>
-                <p class="text-muted small">* سيتم حساب الربح/الخسارة/الصافي تلقائياً</p>
-                <!-- Net Profit calculated automatically on backend -->
+            </form>
         </div>
-        <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
-            <button type="submit" class="btn btn-primary">حفظ</button>
-        </div>
-        </form>
     </div>
-</div>
 </div>
 {% endblock %}

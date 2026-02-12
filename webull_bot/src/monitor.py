@@ -94,6 +94,16 @@ class MonitorEngine:
                     target_strike = float(strike_val) if strike_val is not None else 0.0
                     contract_type = 'C' if str(cmd['contract_type']).upper().startswith('C') else 'P'
                     
+                    # Load persisted price tracking from DB if not in memory
+                    cmd_id = cmd['id']
+                    if cmd_id not in self.last_notified:
+                        db_last = float(cmd.get('last_notified_price', 0) or 0)
+                        db_peak = float(cmd.get('peak_price', 0) or 0)
+                        if db_last > 0:
+                            self.last_notified[cmd_id] = db_last
+                        if db_peak > 0:
+                            self.peak_prices[cmd_id] = db_peak
+                    
                     # Fuzzy match for strike (float precision issue)
                     # We look for closest strike in the chain data
                     # chain_data keys are (strike_float, type_str)
@@ -137,7 +147,6 @@ class MonitorEngine:
                         pass
                     # -----------------------
 
-                    cmd_id = cmd['id']
                     mode = cmd.get('notification_mode', 'always')
                     
                     notification_needed = False
@@ -151,6 +160,12 @@ class MonitorEngine:
                     is_new_peak = current_price > self.peak_prices[cmd_id]
                     if is_new_peak:
                         self.peak_prices[cmd_id] = current_price
+                        # Persist peak to DB
+                        self.db.update_price_tracking(
+                            cmd_id, 
+                            self.last_notified.get(cmd_id, 0), 
+                            self.peak_prices[cmd_id]
+                        )
 
                     # --- Logic based on Mode ---
                     if mode == 'peaks':
@@ -194,6 +209,12 @@ class MonitorEngine:
                     if notification_needed:
                         is_first_notification = cmd_id not in self.last_notified
                         self.last_notified[cmd_id] = current_price
+                        # Persist to DB after notification
+                        self.db.update_price_tracking(
+                            cmd_id,
+                            self.last_notified[cmd_id],
+                            self.peak_prices.get(cmd_id, current_price)
+                        )
                         
                         img_data = {
                             'symbol': cmd['symbol'],

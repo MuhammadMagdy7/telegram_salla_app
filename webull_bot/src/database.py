@@ -55,9 +55,14 @@ class Database:
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                         contract_id TEXT,
                         notification_mode VARCHAR(20) DEFAULT 'always',
-                        postgres_id INTEGER
+                        postgres_id INTEGER,
+                        last_notified_price DECIMAL DEFAULT 0,
+                        peak_price DECIMAL DEFAULT 0
                     )
                 ''')
+                # Add columns if they don't exist (for existing databases)
+                cur.execute("ALTER TABLE monitoring_commands ADD COLUMN IF NOT EXISTS last_notified_price DECIMAL DEFAULT 0")
+                cur.execute("ALTER TABLE monitoring_commands ADD COLUMN IF NOT EXISTS peak_price DECIMAL DEFAULT 0")
                 conn.commit()
             conn.close()
             logger.info("PostgreSQL Database initialized successfully")
@@ -156,3 +161,17 @@ class Database:
         except Exception as e:
             logger.error(f"Error removing command {cmd_id}: {e}")
             return False
+
+    def update_price_tracking(self, cmd_id, last_notified_price, peak_price):
+        """Update the last notified price and peak price for a command."""
+        try:
+            conn = self._get_conn()
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE monitoring_commands SET last_notified_price = %s, peak_price = %s WHERE id = %s",
+                    (last_notified_price, peak_price, cmd_id)
+                )
+                conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error updating price tracking for cmd {cmd_id}: {e}")
