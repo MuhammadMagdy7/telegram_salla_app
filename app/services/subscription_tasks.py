@@ -44,22 +44,31 @@ async def check_expired_subscriptions(bot):
                     sub_id
                 )
                 
-                # 2. Try to kick user from channel
+                # 2. Try to kick user from channel AND groups
+                target_chats = []
                 if settings.CHANNEL_ID:
+                    target_chats.append(settings.CHANNEL_ID)
+                
+                # Add extra groups
+                extra_groups = settings.get_group_ids()
+                target_chats.extend(extra_groups)
+                
+                for chat_id in target_chats:
+                    if not chat_id: continue
                     try:
                         await bot.ban_chat_member(
-                            chat_id=settings.CHANNEL_ID,
+                            chat_id=chat_id,
                             user_id=user_id
                         )
                         # Unban immediately so they can rejoin if they subscribe again
                         await bot.unban_chat_member(
-                            chat_id=settings.CHANNEL_ID,
+                            chat_id=chat_id,
                             user_id=user_id,
                             only_if_banned=True
                         )
-                        logger.info(f"Kicked user {user_id} from channel due to expired subscription")
+                        logger.info(f"Kicked user {user_id} from chat {chat_id} due to expired subscription")
                     except Exception as kick_err:
-                        logger.warning(f"Could not kick user {user_id}: {kick_err}")
+                        logger.warning(f"Could not kick user {user_id} from {chat_id}: {kick_err}")
                 
                 # 3. Send notification to user
                 try:
@@ -233,44 +242,53 @@ async def check_unauthorized_members(bot):
             if has_subscription:
                 continue
             
-            # Check if user is member of channel
-            try:
-                member = await bot.get_chat_member(settings.CHANNEL_ID, user_id)
-                
-                # If member is still in channel (not left, kicked, or restricted)
-                if member.status in ['member', 'restricted']:
-                    # Kick user
-                    try:
-                        await bot.ban_chat_member(
-                            chat_id=settings.CHANNEL_ID,
-                            user_id=user_id
-                        )
-                        await bot.unban_chat_member(
-                            chat_id=settings.CHANNEL_ID,
-                            user_id=user_id,
-                            only_if_banned=True
-                        )
-                        logger.info(f"Kicked unauthorized user {user_id} from channel")
-                        
-                        # Notify user
+            # Check if user is member of any target chat (Channel + Groups)
+            target_chats = []
+            if settings.CHANNEL_ID:
+                target_chats.append(settings.CHANNEL_ID)
+            target_chats.extend(settings.get_group_ids())
+
+            for chat_id in target_chats:
+                if not chat_id: continue
+                try:
+                    member = await bot.get_chat_member(chat_id, user_id)
+                    
+                    # If member is still in chat (not left, kicked, or restricted)
+                    if member.status in ['member', 'restricted']:
+                        # Kick user
                         try:
-                            await bot.send_message(
-                                user_id,
-                                "⚠️ تم إزالتك من القناة لأنه لا يوجد لديك اشتراك فعال.\n\n"
-                                "للاشتراك والعودة للقناة:\n"
-                                "https://salla.sa/investly11"
+                            await bot.ban_chat_member(
+                                chat_id=chat_id,
+                                user_id=user_id
                             )
-                        except:
-                            pass
-                        
-                        kicked_count += 1
-                        
-                    except Exception as kick_err:
-                        logger.warning(f"Could not kick user {user_id}: {kick_err}")
-                        
-            except Exception as check_err:
-                # User might not be/never was in channel - that's fine
-                pass
+                            # Unban immediately
+                            await bot.unban_chat_member(
+                                chat_id=chat_id,
+                                user_id=user_id,
+                                only_if_banned=True
+                            )
+                            logger.info(f"Kicked unauthorized user {user_id} from chat {chat_id}")
+                            
+                            # Notify user (once per run is enough, but maybe acceptable here)
+                            if chat_id == settings.CHANNEL_ID: # Notify mostly for channel
+                                try:
+                                    await bot.send_message(
+                                        user_id,
+                                        "⚠️ تم إزالتك من القناة/المجموعة لأنه لا يوجد لديك اشتراك فعال.\n\n"
+                                        "للاشتراك والعودة:\n"
+                                        "https://salla.sa/investly11"
+                                    )
+                                except:
+                                    pass
+                            
+                            kicked_count += 1
+                            
+                        except Exception as kick_err:
+                            logger.warning(f"Could not kick user {user_id} from {chat_id}: {kick_err}")
+                            
+                except Exception as check_err:
+                    # User might not be/never was in chat - that's fine
+                    pass
         
         if kicked_count > 0:
             logger.info(f"Kicked {kicked_count} unauthorized members from channel")

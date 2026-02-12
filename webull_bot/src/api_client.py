@@ -124,6 +124,15 @@ class MassiveAPIClient:
                         if type_key in target_row:
                             data = target_row[type_key]
                             
+                            # --- NEW LOGIC: Fetch Real-Time Quote for this specific contract ---
+                            ticker_id = data.get('tickerId')
+                            if ticker_id:
+                                # Fetch single quote
+                                quotes_map = self._fetch_option_quotes_batch([ticker_id])
+                                if ticker_id in quotes_map:
+                                    data.update(quotes_map[ticker_id])
+                            # -------------------------------------------------------------------
+                            
                             # Extract Data - Try multiple sources
                             last = float(data.get('close') or data.get('price') or data.get('preClose') or 0)
                             
@@ -198,6 +207,29 @@ class MassiveAPIClient:
             lookup = {}
 
             if chain and isinstance(chain, list):
+                # --- NEW LOGIC: Fetch Real-Time Quotes ---
+                derivative_ids = []
+                for row in chain:
+                    if 'call' in row and row['call'].get('tickerId'):
+                        derivative_ids.append(row['call']['tickerId'])
+                    if 'put' in row and row['put'].get('tickerId'):
+                        derivative_ids.append(row['put']['tickerId'])
+                
+                # Fetch real-time quotes
+                quotes_map = self._fetch_option_quotes_batch(derivative_ids)
+                
+                # Merge quotes back into chain
+                for row in chain:
+                    if 'call' in row:
+                        tid = row['call'].get('tickerId')
+                        if tid and tid in quotes_map:
+                            row['call'].update(quotes_map[tid])
+                    if 'put' in row:
+                        tid = row['put'].get('tickerId')
+                        if tid and tid in quotes_map:
+                            row['put'].update(quotes_map[tid])
+                # -----------------------------------------
+
                 for row in chain:
                     row_strike = float(row.get('strikePrice', 0))
                     
