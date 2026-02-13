@@ -1020,7 +1020,12 @@ async def cmd_enter(message: types.Message):
 
         entry_price = float(entry_str)
 
-        # Fetch current price for logging
+        type_ar = "🟢 كول 🟢" if c_type.upper().startswith('C') else "🔴 بوت 🔴"
+
+        # Immediate response - don't make user wait for API
+        await message.answer("⌛ جاري تفعيل مراقبة الدخول...")
+
+        # Fetch current price for logging (slow API call)
         current_price_val = 0.0
         try:
              data = await api.get_market_data(symbol.upper(), c_type.upper(), expiration, strike)
@@ -1045,9 +1050,7 @@ async def cmd_enter(message: types.Message):
             postgres_id=pg_id
         )
         
-        type_ar = "🟢 كول 🟢" if c_type.upper().startswith('C') else "🔴 بوت 🔴"
-        
-        # Send detailed confirmation to Admin (Bot Chat) only
+        # Send detailed confirmation
         await message.answer(
             text=(
                 f"🚀 *تم تفعيل مراقبة الدخول* (رقم {cmd_id})\n\n"
