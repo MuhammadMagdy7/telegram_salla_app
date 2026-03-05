@@ -269,14 +269,28 @@ class MonitorEngine:
 
                         for chat_id in target_chats:
                             try:
-                                await self.bot.send_photo(
-                                    chat_id=chat_id, 
-                                    photo=photo, 
+                                image_buf.seek(0)
+                                photo_send = BufferedInputFile(image_buf.read(), filename=fname)
+                                first_msg_id = cmd.get("first_message_id")
+                                reply_to = first_msg_id if (first_msg_id and not is_first_notification) else None
+                                sent = await self.bot.send_photo(
+                                    chat_id=chat_id,
+                                    photo=photo_send,
                                     caption=caption,
-                                    parse_mode="Markdown"
+                                    parse_mode="Markdown",
+                                    reply_to_message_id=reply_to
                                 )
+                                if is_first_notification and sent:
+                                    try:
+                                        conn = self.db._get_conn()
+                                        with conn.cursor() as cur:
+                                            cur.execute("UPDATE monitoring_commands SET first_message_id = %s WHERE id = %s", (sent.message_id, cmd_id))
+                                            conn.commit()
+                                        conn.close()
+                                        cmd["first_message_id"] = sent.message_id
+                                    except Exception as db_err:
+                                        logger.error(f"Failed to save first_message_id: {db_err}")
                             except Exception as send_err:
                                 logger.error(f"Failed to send photo to {chat_id}: {send_err}")
-                        
                 except Exception as e:
                     logger.error(f"Error processing cmd {cmd['id']} in batch: {e}")
