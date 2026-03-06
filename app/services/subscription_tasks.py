@@ -159,7 +159,7 @@ async def send_expiration_reminders(bot):
             LEFT JOIN users u ON s.telegram_user_id = u.telegram_user_id
             WHERE s.status = 'active' 
             AND DATE(s.end_date) = CURRENT_DATE
-            AND (s.reminder_1_today IS NULL OR s.reminder_1_today = FALSE)
+            AND (s.reminder_today IS NULL OR s.reminder_today = FALSE)
         """)
         
         for sub in today_expiring:
@@ -171,7 +171,7 @@ async def send_expiration_reminders(bot):
                     "https://salla.sa/investly11",
                     parse_mode="Markdown"
                 )
-                await db.execute("UPDATE subscriptions SET reminder_1_today = TRUE WHERE id = $1", sub['id'])
+                await db.execute("UPDATE subscriptions SET reminder_today = TRUE WHERE id = $1", sub['id'])
             except Exception as e:
                 logger.warning(f"Could not send today reminder to {sub['telegram_user_id']}: {e}")
         

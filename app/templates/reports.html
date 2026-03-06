@@ -1,210 +1,424 @@
 {% extends "base.html" %}
-{% block title %}التقارير{% endblock %}
+{% block title %}تقرير صفقات الأوبشن{% endblock %}
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-6">
-        <h2><i class="bi bi-file-earmark-pdf"></i> التقارير الشهرية</h2>
-    </div>
-</div>
+<style>
+    .report-card {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 15px;
+        color: #fff;
+        padding: 25px;
+        margin-bottom: 20px;
+    }
+    .report-header {
+        border-bottom: 2px solid #333;
+        padding-bottom: 15px;
+        margin-bottom: 20px;
+    }
+    .stat-box {
+        text-align: center;
+        padding: 15px;
+        border-radius: 10px;
+    }
+    .stat-box.total {
+        background: rgba(255,255,255,0.1);
+    }
+    .stat-box.winning {
+        background: rgba(40, 167, 69, 0.2);
+        border: 1px solid #28a745;
+    }
+    .stat-box.losing {
+        background: rgba(220, 53, 69, 0.2);
+        border: 1px solid #dc3545;
+    }
+    .stat-box.rate {
+        background: rgba(0, 123, 255, 0.2);
+        border: 1px solid #007bff;
+    }
+    .stat-box h2 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    .stat-box small {
+        opacity: 0.8;
+    }
+    .net-profit-box {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+    }
+    .net-profit-box.negative {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    }
+    .net-profit-box h1 {
+        margin: 0;
+        font-size: 2.5rem;
+    }
+    .report-table {
+        background: #1e1e2f;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .report-table thead {
+        background: #2d2d44;
+    }
+    .report-table th, .report-table td {
+        padding: 12px 15px;
+        vertical-align: middle;
+        border-color: #333 !important;
+    }
+    .report-table tbody tr:hover {
+        background: rgba(255,255,255,0.05);
+    }
+    .badge-call {
+        background: #28a745;
+        color: #fff;
+        padding: 5px 15px;
+        border-radius: 5px;
+        font-weight: bold;
+    }
+    .badge-put {
+        background: #dc3545;
+        color: #fff;
+        padding: 5px 15px;
+        border-radius: 5px;
+        font-weight: bold;
+    }
+    .profit-cell {
+        color: #28a745;
+        font-weight: bold;
+    }
+    .loss-cell {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .summary-row {
+        background: #2d2d44 !important;
+    }
+    .summary-row td {
+        font-weight: bold;
+        font-size: 1.1rem;
+    }
+    .filter-bar {
+        background: #2d2d44;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    .filter-bar .form-control, .filter-bar .form-select {
+        background: #1e1e2f;
+        border: 1px solid #444;
+        color: #fff;
+    }
+    .filter-bar .form-control:focus, .filter-bar .form-select:focus {
+        background: #1e1e2f;
+        border-color: #007bff;
+        color: #fff;
+    }
+    .btn-search {
+        background: #007bff;
+        border: none;
+        padding: 10px 30px;
+    }
+    .btn-clear {
+        background: transparent;
+        border: 1px solid #6c757d;
+        color: #6c757d;
+    }
+    .report-footer {
+        background: #1e1e2f;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+    .footer-stat {
+        text-align: center;
+        padding: 15px;
+    }
+    .footer-stat.profit {
+        border-right: 3px solid #28a745;
+    }
+    .footer-stat.loss {
+        border-right: 3px solid #dc3545;
+    }
+    .footer-stat.net {
+        border-right: 3px solid #ffc107;
+    }
+</style>
 
-<!-- Report Filters -->
-<div class="card mb-4">
-    <div class="card-header bg-primary text-white">
-        <h5 class="mb-0"><i class="bi bi-funnel"></i> خيارات التقرير</h5>
+<div class="report-card">
+    <!-- Header -->
+    <div class="report-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-graph-up-arrow"></i> تقرير صفقات الأوبشن المعيارة</h4>
+            <small class="text-muted">جميع الصفقات</small>
+        </div>
+        <div class="net-profit-box {% if net_profit < 0 %}negative{% endif %}">
+            <small>صافي ربح الثلاث</small>
+            <h1 class="text-white">${{ "%.1f"|format(net_profit) }}</h1>
+            <small>({{ "%.0f"|format(net_profit * 3.75) }} ريال)</small>
+        </div>
     </div>
-    <div class="card-body">
-        <form method="GET" action="/admin/reports" class="row g-3">
-            <div class="col-md-3">
-                <label class="form-label">الشهر</label>
-                <select name="month" class="form-select">
-                    <option value="">كل الأشهر</option>
-                    {% for m in available_months %}
-                    <option value="{{ m }}" {% if selected_month == m %}selected{% endif %}>{{ m }}</option>
-                    {% endfor %}
+
+    <!-- Stats Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-box rate">
+                <h2>{{ "%.2f"|format(win_rate) }}%</h2>
+                <small>نسبة النجاح</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-box losing">
+                <h2>{{ losing_count }}</h2>
+                <small>الصفقات الخاسرة</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-box winning">
+                <h2>{{ winning_count }}</h2>
+                <small>الصفقات الرابحة</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-box total">
+                <h2>{{ contracts|length }}</h2>
+                <small>إجمالي الصفقات</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+        <form method="GET" action="/admin/reports" class="row g-2 align-items-center">
+            <div class="col-auto">
+                <select name="period" class="form-select">
+                    <option value="">الأسبوع</option>
+                    <option value="week" {% if period == 'week' %}selected{% endif %}>هذا الأسبوع</option>
+                    <option value="month" {% if period == 'month' %}selected{% endif %}>هذا الشهر</option>
+                    <option value="all" {% if period == 'all' %}selected{% endif %}>الكل</option>
                 </select>
             </div>
-            <div class="col-md-3">
-                <label class="form-label">من تاريخ</label>
-                <input type="date" name="from_date" class="form-control" value="{{ from_date or '' }}">
+            <div class="col-auto">
+                <input type="date" name="from_date" class="form-control" placeholder="mm/dd/yyyy" value="{{ from_date or '' }}">
             </div>
-            <div class="col-md-3">
-                <label class="form-label">إلى تاريخ</label>
-                <input type="date" name="to_date" class="form-control" value="{{ to_date or '' }}">
+            <div class="col-auto">
+                <input type="date" name="to_date" class="form-control" placeholder="mm/dd/yyyy" value="{{ to_date or '' }}">
             </div>
-            <div class="col-md-3 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-search"></i> عرض
+            <div class="col-auto">
+                <button type="submit" class="btn btn-search text-white">
+                    <i class="bi bi-search"></i> بحث
                 </button>
+            </div>
+            <div class="col-auto">
+                <a href="/admin/reports" class="btn btn-clear">مسح الكل</a>
             </div>
         </form>
     </div>
-</div>
 
-<!-- Summary Stats -->
-<div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <div class="card text-white bg-success h-100">
-            <div class="card-body text-center">
-                <h6 class="card-title">إجمالي الربح</h6>
-                <h3 class="fw-bold">${{ "%.2f"|format(total_profit) }}</h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-danger h-100">
-            <div class="card-body text-center">
-                <h6 class="card-title">إجمالي الخسارة</h6>
-                <h3 class="fw-bold">${{ "%.2f"|format(total_loss) }}</h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white {% if net_profit >= 0 %}bg-info{% else %}bg-warning{% endif %} h-100">
-            <div class="card-body text-center">
-                <h6 class="card-title">صافي الربح</h6>
-                <h3 class="fw-bold">${{ "%.2f"|format(net_profit) }}</h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-secondary h-100">
-            <div class="card-body text-center">
-                <h6 class="card-title">عدد الصفقات</h6>
-                <h3 class="fw-bold">{{ contracts|length }}</h3>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Export Buttons -->
-<div class="card mb-4">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-download"></i> تصدير التقرير</h5>
-    </div>
-    <div class="card-body">
-        <div class="row g-2">
-            <div class="col-auto">
-                <form method="POST" action="/admin/reports/download_pdf" style="display:inline;">
-                    <input type="hidden" name="month" value="{{ selected_month or '' }}">
-                    <input type="hidden" name="from_date" value="{{ from_date or '' }}">
-                    <input type="hidden" name="to_date" value="{{ to_date or '' }}">
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-file-earmark-pdf"></i> تحميل PDF
-                    </button>
-                </form>
-            </div>
-            <div class="col-auto">
-                <form method="POST" action="/admin/reports/send_telegram" style="display:inline;">
-                    <input type="hidden" name="month" value="{{ selected_month or '' }}">
-                    <input type="hidden" name="from_date" value="{{ from_date or '' }}">
-                    <input type="hidden" name="to_date" value="{{ to_date or '' }}">
-                    <button type="submit" class="btn btn-info">
-                        <i class="bi bi-telegram"></i> إرسال للقناة
-                    </button>
-                </form>
-            </div>
-            <div class="col-auto">
-                <form method="POST" action="/admin/reports/download_excel" style="display:inline;">
-                    <input type="hidden" name="month" value="{{ selected_month or '' }}">
-                    <input type="hidden" name="from_date" value="{{ from_date or '' }}">
-                    <input type="hidden" name="to_date" value="{{ to_date or '' }}">
-                    <button type="submit" class="btn btn-success">
-                        <i class="bi bi-file-earmark-excel"></i> تحميل Excel
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Contracts Table -->
-<div class="card">
-    <div class="card-header bg-white">
-        <h5 class="mb-0"><i class="bi bi-table"></i> تفاصيل الصفقات</h5>
-    </div>
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-striped table-hover">
-                <thead class="table-dark">
-                    <tr>
-                        <th>التاريخ</th>
-                        <th>السترايك</th>
-                        <th>سعر العقد</th>
-                        <th>الربح</th>
-                        <th>الخسارة</th>
-                        <th>صافي العقد</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for contract in contracts %}
-                    <tr>
-                        <td>{{ contract.contract_date }}</td>
-                        <td>{{ contract.strike }}</td>
-                        <td>${{ "%.2f"|format(contract.contract_price or 0) }}</td>
-                        <td class="text-success">${{ "%.2f"|format(contract.profit or 0) }}</td>
-                        <td class="text-danger">${{ "%.2f"|format(contract.loss or 0) }}</td>
-                        <td class="{% if (contract.net_profit or 0) >= 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
-                            ${{ "%.2f"|format(contract.net_profit or 0) }}
-                        </td>
-                    </tr>
+    <!-- Contracts Table -->
+    <div class="report-table">
+        <table class="table table-dark table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>العقد</th>
+                    <th>النوع</th>
+                    <th>سعر الدخول</th>
+                    <th>أعلى سعر</th>
+                    <th>الربح / الخسارة</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for contract in contracts %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>
+                        <strong>{{ contract.symbol or '' }} {{ contract.strike }}</strong>
+                    </td>
+                    <td>
+                        {% if contract.contract_type == 'CALL' or contract.contract_type == 'C' %}
+                        <span class="badge-call">CALL</span>
+                        {% elif contract.contract_type == 'PUT' or contract.contract_type == 'P' %}
+                        <span class="badge-put">PUT</span>
+                        {% else %}
+                        <span class="badge bg-secondary">{{ contract.contract_type or '-' }}</span>
+                        {% endif %}
+                    </td>
+                    <td>${{ "%.2f"|format(contract.entry_price or contract.contract_price or 0) }}</td>
+                    {% set entry = (contract.entry_price or contract.contract_price or 0) %}
+                    {% set net = (contract.net_profit or 0) %}
+                    {% if contract.highest_price and contract.highest_price > 0 %}
+                        {% set highest = contract.highest_price %}
+                    {% elif net > 0 and contract.profit %}
+                        {# Old format: profit column stores closing/exit price #}
+                        {% set highest = contract.profit %}
                     {% else %}
-                    <tr>
-                        <td colspan="6" class="text-center text-muted py-4">لا توجد صفقات في الفترة المحددة</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                {% if contracts %}
-                <tfoot class="table-light fw-bold">
-                    <tr>
-                        <td colspan="3">الإجمالي</td>
-                        <td class="text-success">${{ "%.2f"|format(total_profit) }}</td>
-                        <td class="text-danger">${{ "%.2f"|format(total_loss) }}</td>
-                        <td class="{% if net_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
-                            ${{ "%.2f"|format(net_profit) }}
-                        </td>
-                    </tr>
-                </tfoot>
-                {% endif %}
-            </table>
+                        {% set highest = entry %}
+                    {% endif %}
+                    <td>${{ "%.2f"|format(highest) }}</td>
+                    <td>
+                        {% if net >= 0 %}
+                        <span class="profit-cell">${{ "%.0f"|format(net) }}+</span>
+                        {% else %}
+                        <span class="loss-cell">${{ "%.0f"|format(contract.loss or (net * -1)) }}-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">لا توجد صفقات في الفترة المحددة</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% if contracts %}
+            <tfoot>
+                <tr class="summary-row">
+                    <td colspan="4"></td>
+                    <td class="text-end">الإجمالي:</td>
+                    <td>
+                        <span class="{% if net_profit >= 0 %}profit-cell{% else %}loss-cell{% endif %}">
+                            ${{ "%.1f"|format(net_profit) }}
+                        </span>
+                    </td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+
+    <!-- Footer Summary -->
+    <div class="report-footer">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="footer-stat net">
+                    <small class="text-warning">إجمالي الربح</small>
+                    <h3 class="text-warning mb-0">${{ "%.1f"|format(total_profit) }}</h3>
+                    <small class="text-muted">الصفقات الرابحة</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="footer-stat loss">
+                    <small class="text-danger">مجموع الخسارات</small>
+                    <h3 class="text-danger mb-0">${{ "%.1f"|format(total_loss) }}</h3>
+                    <small class="text-muted">الصفقات الخاسرة</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="footer-stat profit">
+                    <small class="text-success">صافي الربح</small>
+                    <h3 class="{% if net_profit >= 0 %}text-success{% else %}text-danger{% endif %} mb-0">${{ "%.1f"|format(net_profit) }}</h3>
+                    <small class="text-muted">النتيجة النهائية</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Buttons -->
+    <div class="mt-4 d-flex gap-2 justify-content-end flex-wrap">
+        <form method="POST" action="/admin/reports/download_pdf" style="display:inline;">
+            <input type="hidden" name="from_date" value="{{ from_date or '' }}">
+            <input type="hidden" name="to_date" value="{{ to_date or '' }}">
+            <button type="submit" class="btn btn-danger">
+                <i class="bi bi-file-earmark-pdf"></i> تحميل PDF
+            </button>
+        </form>
+        <form method="POST" action="/admin/reports/send_telegram" style="display:inline;">
+            <input type="hidden" name="from_date" value="{{ from_date or '' }}">
+            <input type="hidden" name="to_date" value="{{ to_date or '' }}">
+            <button type="submit" class="btn btn-info">
+                <i class="bi bi-telegram"></i> إرسال للقناة
+            </button>
+        </form>
+        <form method="POST" action="/admin/reports/download_excel" style="display:inline;">
+            <input type="hidden" name="from_date" value="{{ from_date or '' }}">
+            <input type="hidden" name="to_date" value="{{ to_date or '' }}">
+            <button type="submit" class="btn btn-success">
+                <i class="bi bi-file-earmark-excel"></i> تحميل Excel
+            </button>
+        </form>
+    </div>
+
+    <!-- Footer Info -->
+    <div class="text-center mt-4 pt-3 border-top border-secondary">
+        <small class="text-muted">
+            investly111_bot@ | 
+            {% if from_date and to_date %}
+            من {{ from_date }} الى {{ to_date }}
+            {% else %}
+            جميع الصفقات
+            {% endif %}
+        </small>
+        <br>
+        <a href="#" class="btn btn-outline-light btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#addContractModal">
+            <i class="bi bi-pencil"></i> وضع التعديل
+        </a>
+    </div>
+</div>
+
+<!-- Add Contract Modal -->
+<div class="modal fade" id="addContractModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> إضافة صفقة جديدة</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="/admin/contracts/add">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">الرمز</label>
+                            <input type="text" name="symbol" class="form-control bg-dark text-white border-secondary" placeholder="NVDA" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">السترايك</label>
+                            <input type="text" name="strike" class="form-control bg-dark text-white border-secondary" placeholder="197.5" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">النوع</label>
+                            <select name="contract_type" class="form-select bg-dark text-white border-secondary" required>
+                                <option value="CALL">CALL</option>
+                                <option value="PUT">PUT</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">التاريخ</label>
+                            <input type="date" name="contract_date" class="form-control bg-dark text-white border-secondary" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">سعر الدخول</label>
+                            <input type="number" step="0.01" name="entry_price" class="form-control bg-dark text-white border-secondary" placeholder="3.33" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">أعلى سعر</label>
+                            <input type="number" step="0.01" name="highest_price" class="form-control bg-dark text-white border-secondary" placeholder="5.93">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">الربح</label>
+                            <input type="number" step="0.01" name="profit" class="form-control bg-dark text-white border-secondary" placeholder="260">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">الخسارة</label>
+                            <input type="number" step="0.01" name="loss" class="form-control bg-dark text-white border-secondary" placeholder="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-lg"></i> إضافة
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 
-<!-- Monthly Summary -->
-{% if monthly_summary %}
-<div class="card mt-4">
-    <div class="card-header bg-white">
-        <h5 class="mb-0"><i class="bi bi-bar-chart"></i> ملخص شهري</h5>
-    </div>
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-bordered">
-                <thead class="table-secondary">
-                    <tr>
-                        <th>الشهر</th>
-                        <th>عدد الصفقات</th>
-                        <th>إجمالي الربح</th>
-                        <th>إجمالي الخسارة</th>
-                        <th>صافي الربح</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for m in monthly_summary %}
-                    <tr>
-                        <td>{{ m.month }}</td>
-                        <td>{{ m.count }}</td>
-                        <td class="text-success">${{ "%.2f"|format(m.profit) }}</td>
-                        <td class="text-danger">${{ "%.2f"|format(m.loss) }}</td>
-                        <td class="{% if m.net >= 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
-                            ${{ "%.2f"|format(m.net) }}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-{% endif %}
+<!-- Floating Add Button -->
+<button type="button" class="btn btn-success btn-lg rounded-circle position-fixed shadow" style="bottom: 30px; left: 30px; width: 60px; height: 60px; z-index: 1000;" data-bs-toggle="modal" data-bs-target="#addContractModal">
+    <i class="bi bi-plus-lg"></i>
+</button>
 
 {% endblock %}

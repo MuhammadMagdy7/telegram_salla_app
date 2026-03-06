@@ -237,8 +237,14 @@ async def add_contract(
     request: Request,
     contract_date: str = Form(...),
     strike: str = Form(...),
-    contract_price: float = Form(0),
-    closing_price: float = Form(0)
+    contract_price: float = Form(None),
+    closing_price: float = Form(None),
+    symbol: str = Form(None),
+    contract_type: str = Form(None),
+    entry_price: float = Form(None),
+    highest_price: float = Form(None),
+    profit: float = Form(None),
+    loss: float = Form(None)
 ):
     user = get_current_user(request)
     if not user: return RedirectResponse(url="/admin/login")
@@ -246,27 +252,44 @@ async def add_contract(
     # Convert date string to date object
     dt_obj = datetime.strptime(contract_date, "%Y-%m-%d").date()
     
-    # SIMPLE LOGIC:
-    # User enters: contract_price (entry) and closing_price (exit)
-    # System calculates:
-    # - If closing_price >= contract_price: profit = closing_price, loss = 0, net = closing_price - contract_price
-    # - If closing_price < contract_price: profit = 0, loss = contract_price - closing_price, net = -(loss)
-    
-    if closing_price >= contract_price:
-        # Profit or breakeven
-        profit = round(closing_price, 2)  # Store closing price in profit column
-        loss = 0
-        net_profit = round(closing_price - contract_price, 2)
-    else:
-        # Loss
-        profit = 0
-        loss = round(contract_price - closing_price, 2)
-        net_profit = round(-loss, 2)
+    # Handle new format (from reports page modal)
+    if entry_price is not None:
+        # New format with symbol, contract_type, entry_price, highest_price
+        actual_profit = profit or 0
+        actual_loss = loss or 0
+        net_profit = actual_profit - actual_loss
         
-    await db.execute(
-        "INSERT INTO option_contracts (contract_date, strike, contract_price, profit, loss, net_profit) VALUES ($1, $2, $3, $4, $5, $6)",
-        dt_obj, strike, contract_price, profit, loss, net_profit
-    )
+        await db.execute(
+            """INSERT INTO option_contracts 
+               (contract_date, strike, contract_price, profit, loss, net_profit, symbol, contract_type, entry_price, highest_price) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)""",
+            dt_obj, strike, entry_price, actual_profit, actual_loss, net_profit, symbol, contract_type, entry_price, highest_price or 0
+        )
+    else:
+        # Old format with contract_price and closing_price
+        contract_price = contract_price or 0
+        closing_price = closing_price or 0
+        
+        if closing_price >= contract_price:
+            # Profit or breakeven
+            actual_profit = round(closing_price, 2)
+            actual_loss = 0
+            net_profit = round(closing_price - contract_price, 2)
+        else:
+            # Loss
+            actual_profit = 0
+            actual_loss = round(contract_price - closing_price, 2)
+            net_profit = round(-actual_loss, 2)
+            
+        await db.execute(
+            "INSERT INTO option_contracts (contract_date, strike, contract_price, profit, loss, net_profit) VALUES ($1, $2, $3, $4, $5, $6)",
+            dt_obj, strike, contract_price, actual_profit, actual_loss, net_profit
+        )
+    
+    # Redirect back to referrer or contracts page
+    referer = request.headers.get('referer', '/admin/contracts')
+    if 'reports' in referer:
+        return RedirectResponse(url="/admin/reports", status_code=303)
     return RedirectResponse(url="/admin/contracts", status_code=303)
 
 @router.post("/contracts/delete")
@@ -562,7 +585,8 @@ async def reports_page(
     request: Request,
     month: str = None,
     from_date: str = None,
-    to_date: str = None
+    to_date: str = None,
+    period: str = None
 ):
     user = get_current_user(request)
     if not user:
@@ -581,6 +605,12 @@ async def reports_page(
     query = "SELECT * FROM option_contracts WHERE 1=1"
     args = []
     arg_index = 1
+    
+    # Handle period filter
+    if period == 'week':
+        query += f" AND contract_date >= CURRENT_DATE - INTERVAL '7 days'"
+    elif period == 'month':
+        query += f" AND contract_date >= CURRENT_DATE - INTERVAL '30 days'"
     
     if month:
         query += f" AND TO_CHAR(contract_date, 'YYYY-MM') = ${arg_index}"
@@ -606,6 +636,12 @@ async def reports_page(
     total_loss = sum(float(c['loss'] or 0) for c in contracts)
     net_profit = sum(float(c['net_profit'] or 0) for c in contracts)
     
+    # Calculate winning/losing stats
+    winning_count = sum(1 for c in contracts if float(c['net_profit'] or 0) > 0)
+    losing_count = sum(1 for c in contracts if float(c['net_profit'] or 0) < 0)
+    total_count = len(contracts)
+    win_rate = (winning_count / total_count * 100) if total_count > 0 else 0
+    
     # Get monthly summary
     monthly_query = """
         SELECT 
@@ -627,9 +663,13 @@ async def reports_page(
         "selected_month": month,
         "from_date": from_date,
         "to_date": to_date,
+        "period": period,
         "total_profit": total_profit,
         "total_loss": total_loss,
         "net_profit": net_profit,
+        "winning_count": winning_count,
+        "losing_count": losing_count,
+        "win_rate": win_rate,
         "monthly_summary": monthly_summary
     })
 
